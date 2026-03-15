@@ -2,7 +2,23 @@
 
 ## Overview
 
-This is a minimal DSL for documenting APIs and data models. You write `.stencil` files once and compile them to multiple output formats using the `spray` CLI.
+This is a minimal DSL for documenting APIs and data models. You write `.stencil` files once and compile them to multiple
+output formats using the `spray` CLI.
+
+## Use Cases
+
+Stencil is designed to support multiple documentation scenarios:
+
+1. **API Documentation**: Document REST, RPC, or event-driven APIs with complete request/response specifications. Use
+   `api` blocks alongside `model` and `input` definitions to describe your application's endpoints.
+
+2. **Data Model Documentation**: Document data structures without any API layer. A suite of `.stencil` files containing
+   only `model` definitions (no `api` blocks) is perfectly valid and can be compiled to ER diagrams, database schemas,
+   or other data modeling outputs.
+
+3. **Hybrid Documentation**: Combine both of the above approaches. Some files may define only data models, while others
+   define APIs that reference those models. You may generate one or more output formats from the same source files,
+   depending on your documentation needs.
 
 ## Top-Level Structures
 
@@ -23,10 +39,14 @@ A `.stencil` file can be comprised of the following top-level structures:
     <dd>route/procedure definitions</dd>
 </dl>
 
-The `model` and `input` structures are intentional separate, following community best practices to protect against certain types
-of [input threats](https://owaspai.org/docs/2_threats_through_use/) and allowing for more flexible data shapes.
+The `model` and `input` structures are intentionally separate, following community best practices to protect against
+certain types of [input threats](https://owaspai.org/docs/2_threats_through_use/) at the request/input layer. While
+`model` types can
+be used in API responses to document real-world scenarios where applications expose their data models directly, the
+separation ensures that request payloads are explicitly defined and validated through dedicated `input` types.
 
-A `namespace` must exist at the top of a file (anywhere else is invalid). Any `imports` must be grouped at the top of the file, after the `namespace` if it exists, but before any other declarations.
+A `namespace` must exist at the top of a file (anywhere else is invalid). Any `imports` must be grouped at the top of
+the file, after the `namespace` if it exists, but before any other declarations.
 
 The remaining structures (`type`, `model`, `input`, `api`) can be in any order and interleaved as needed.
 
@@ -38,13 +58,12 @@ namespace acme.users.v2
 import acme.common.v1 { Page, PaginationInput, ApiError }
 ```
 
-Each file may declare at most one namespace. An `import` statement is explicit — only listed names are brought into scope (i.e., no "star" patterns like Java).
+Each file may declare at most one namespace. An `import` statement is explicit — only listed names are brought into
+scope (i.e., no "star" patterns like Java).
 
-## Types
+## Scalars
 
-### Scalars
-
-Built-in scalars include:
+Built-in scalar types:
 
 | Type        | Description        |
 |-------------|--------------------|
@@ -57,7 +76,16 @@ Built-in scalars include:
 | `date`      | Date only          |
 | `any`       | Unconstrained type |
 
-### Enums
+## Type Aliases
+
+Type aliases resemble Go's type aliases, allowing you to create new types based on existing ones:
+
+```stencil
+type Email = string
+type Cursor = string
+```
+
+## Enums
 
 Enums look familiar to enums in many programming languages:
 
@@ -69,20 +97,14 @@ enum UserRole {
 }
 ```
 
-### Type aliases
-
-Type aliases resume Go's type aliases, allowing you to create new types based on existing ones:
-
-```stencil
-type Email = string
-type Cursor = string
-```
-
 ## Models
 
-Models represent data [shapes](https://dev.to/tiffengineer/what-is-meant-by-a-shape-in-programming-263c) and these define how data is stored and manipulated within the application. They can be thought of as the "internal" representation of data.
+Models represent data [shapes](https://dev.to/tiffengineer/what-is-meant-by-a-shape-in-programming-263c) and these
+define how data is stored and manipulated within the application. They can be thought of as the "internal"
+representation of data.
 
-A `model` can be have zero or more decorations applied wihch help define relations (similar to relational database associations).
+A `model` can be have zero or more decorations applied wihch help define relations (similar to relational database
+associations).
 
 Examples:
 
@@ -102,25 +124,31 @@ Each item within a model is called a `field`, and a field is represented as `fie
 
 **Available field decorators**
 
-| Decorator            | Description                                                            |
-|----------------------|------------------------------------------------------------------------|
-| `@primary`           | A primary key or identifier                                            |
-| `@unique`            | A constraint that this value is unique within the system               |
-| `@default(value)`    | The default value applied by the system (`now`, `uuid`, or a literal)  |
-| `@updatedAt`         | Calculated automatically on update                                     |
-| `@relation(field:)`  | A foreign-key type of relationship                                     |
-| `@deprecated(msg)`   | Marks a field as deprecated                                            |
+The following decorators are supported for `model` fields. These decorators form a closed set — only the decorators
+listed here are valid for model fields (with the exception of `@raw`, which is available as an escape hatch for all
+structures).
 
+| Decorator           | Description                                                           |
+|---------------------|-----------------------------------------------------------------------|
+| `@primary`          | A primary key or identifier                                           |
+| `@unique`           | A constraint that this value is unique within the system              |
+| `@default(value)`   | The default value applied by the system (`now`, `uuid`, or a literal) |
+| `@updatedAt`        | Calculated automatically on update                                    |
+| `@relation(field:)` | A foreign-key type of relationship                                    |
+| `@deprecated(msg)`  | Marks a field as deprecated                                           |
 
 **Type modifiers:**
 
-- `?` — optional field, indicates the field may be ommitted or set to `null`
+- `?` — optional field, indicates the field may be omitted (absent from the structure) or explicitly set to `null`
 - `[]` — array (e.g. `Post[]`)
-- Both can be combined: `string[]?`
+- Both can be combined: `string[]?` (array that may be omitted or null)
 
 ## Generics
 
-Models and inputs can declare unconstrained generic type parameters.
+Models can declare unconstrained generic type parameters.
+
+>[!NOTE]  
+> Generic type parameters are **not supported** for `input` declarations. Inputs must be concrete types.
 
 ```stencil
 model Page<T> {
@@ -136,12 +164,14 @@ model Result<T, E> {
 }
 ```
 
-On output, generics are [**monomorphized**](https://en.wikipedia.org/wiki/Monomorphization) — `Page<User>` compiles to a concrete named
-schema (e.g. `UserPage` but may vary contextually) in formats that don't support generics natively (OpenAPI, JSON Schema).
+On output, generics are [**monomorphized**](https://en.wikipedia.org/wiki/Monomorphization) — `Page<User>` compiles to a
+concrete named
+schema (e.g. `UserPage` but may vary contextually) in formats that don't support generics natively (OpenAPI, JSON
+Schema).
 
 ## Inputs
 
-An `input` is intended purely for application inputs. This allows for more flexible data shapes and protects against 
+An `input` is intended purely for application inputs. This allows for more flexible data shapes and protects against
 certain types of [input threats](https://owaspai.org/docs/2_threats_through_use/).
 
 ```stencil
@@ -157,7 +187,8 @@ input PaginationInput {
 }
 ```
 
-The only decorator supported by `input` is `@default(value)`, which behaves the same as the `@default` decorator for `model` fields, 
+The only decorator supported by `input` is `@default(value)`, which behaves the same as the `@default` decorator for
+`model` fields,
 applying a default value when the field is omitted from the input.
 
 Inputs intentionally don't support `@primary`, `@relation`, or `@updatedAt` — they're pure payload shapes.
@@ -165,14 +196,14 @@ Inputs intentionally don't support `@primary`, `@relation`, or `@updatedAt` — 
 ## API
 
 An `api` structure defines an endpoint exposed within an application.
-An API block supports both REST and RPC style declarations, as well as publish/subscribe event routing. 
+An API block supports both REST and RPC style declarations, as well as publish/subscribe event routing.
 Decorators can be applied at the API level (applying to all routes) or at the individual route level.
 
 **REST API Example**
 
 ```stencil
 api UserService @version(2) @style(rest) {
-  @baseUrl("/api/v2/users")
+  @basePath("/api/v2/users")
   @auth(bearer)
 
   GET  /      -> Page<User>  @query(PaginationInput)
@@ -184,16 +215,16 @@ api UserService @version(2) @style(rest) {
 
 **API-level decorators** (on the `api` declaration):
 
-| Decorator       | Meaning                                                   |
-|-----------------|-----------------------------------------------------------|
-| `@version(n)`   | (optional) API version number                             |
-| `@style(x)`     | (optional) Route style: `rest` (default), `rpc`, `events` |
+| Decorator     | Meaning                                                   |
+|---------------|-----------------------------------------------------------|
+| `@version(n)` | (optional) API version number                             |
+| `@style(x)`   | (optional) Route style: `rest` (default), `rpc`, `events` |
 
 **Block-level directives** (inside the `api` block, apply to all routes):
 
 | Directive           | Meaning                                          |
 |---------------------|--------------------------------------------------|
-| `@baseUrl("path")`  | URL prefix for all routes                        |
+| `@basePath("path")` | URL prefix for all routes                        |
 | `@auth(scheme)`     | Auth scheme: `bearer`, `apiKey`, `basic`, `none` |
 
 **Route-level decorators:**
@@ -208,8 +239,14 @@ api UserService @version(2) @style(rest) {
 | `@version(n)`        | Route-level version override |
 | `@deprecated("msg")` | Mark route as deprecated     |
 
-Note that path-level identifiers are defined within the path itself, and are not described separated via decorators. 
-For example, `GET /users/:id` defines a path parameter `id` of type `string` (path params are always strings).
+**Path parameters** are defined inline within the route path using colon syntax (`:paramName`). Path parameters are
+always of type `string`. For example, `GET /users/:id` defines a path parameter `id` of type `string`.
+
+>[!WARNING]
+> While `model` types can be used directly as return types in route definitions (e.g., `GET /:id -> User`), this may
+> result in warnings during compilation and could be removed in a future version without a deprecation notice. For
+> endpoints that expose data models, consider defining dedicated output models without decorators to represent layered
+> object mapping, which is a common pattern in real-world applications.
 
 ## API Styles
 
@@ -226,10 +263,12 @@ api UserService @style(rest) {
 ```
 
 >[!WARNING]
-> It is an error to define a route as `@style(resst)`, then omit the HTTP verb and path _or_ use terms from another style. For example, the following is invalid:
+> Route syntax must match the declared API style. It is an error to define a route as `@style(rest)`, then omit the HTTP
+> verb and path _or_ use terms from another style. Style-specific grammar is enforced through semantic validation during
+> compilation. For example, the following is invalid:
 > ```stencil
 > api UserService @style(rest) {
->   # !INVALID
+>   # !INVALID - using RPC syntax in a REST api
 >   rpc GetUser(GetUserInput) -> User
 > }
 > ```
@@ -249,10 +288,12 @@ api FeedService @style(rpc) {
 `rpc stream` indicates server-streaming. Bidirectional streaming may be added in a future version.
 
 >[!WARNING]
-> It is an error to define an endpoint as `@style(rpc)`, then apply REST or eventing keywords. For example, the following is invalid:
+> Route syntax must match the declared API style. It is an error to define an endpoint as `@style(rpc)`, then apply REST
+> or eventing keywords. Style-specific grammar is enforced through semantic validation during compilation. For example,
+> the following is invalid:
 > ```stencil
 > api UserService @style(rpc) {
->   # !INVALID
+>   # !INVALID - using event syntax in an RPC api
 >   publish   UserCreated -> UserCreatedEvent
 >   subscribe UserDeleted -> UserDeletedEvent
 > }
@@ -323,13 +364,12 @@ target name and consume their matching `@raw` block.
 
 ## Output Targets
 
-| Target       | Format              | Notes                                                             |
-|--------------|---------------------|-------------------------------------------------------------------|
-| `openapi`    | OpenAPI 3.x         | (TBD) REST and RPC routes; AsyncAPI considered for events in v2   |
-| `jsonschema` | JSON Schema         | (TBD) One schema per `model` and `input`                          |
-| `mermaid`    | Mermaid `erDiagram` | (TBD) All models and `@relation` links                            |
-| `markdown`   | Markdown tables     | (TBD) Field reference per model + route listing per API           |
-
+| Target       | Format              | Notes                                                           |
+|--------------|---------------------|-----------------------------------------------------------------|
+| `openapi`    | OpenAPI 3.x         | (TBD) REST and RPC routes; AsyncAPI considered for events in v2 |
+| `jsonschema` | JSON Schema         | (TBD) One schema per `model` and `input`                        |
+| `mermaid`    | Mermaid `erDiagram` | (TBD) All models and `@relation` links                          |
+| `markdown`   | Markdown tables     | (TBD) Field reference per model + route listing per API         |
 
 ## Full Example
 
@@ -374,8 +414,14 @@ input UpdateUserInput {
   role: UserRole?
 }
 
+model Result<T, E> {
+  ok:    boolean
+  data:  T?
+  error: E?
+}
+
 api UserService @version(2) @style(rest) {
-  @baseUrl("/api/v2/users")
+  @basePath("/api/v2/users")
   @auth(bearer)
 
   GET  /      -> Page<User>           @query(PaginationInput)
@@ -392,6 +438,11 @@ api UserService @version(2) @style(rest) {
 ---
 
 ## EBNF Grammar
+
+>[!NOTE]
+> The grammar below is intentionally simplified and may contain minor omissions or differences from the worded
+> specification. Semantic validation and certain nuances are described throughout this document. The grammar serves as a
+> structural guide rather than a complete formal specification.
 
 ```ebnf
 File            ::= NamespaceDecl? ImportDecl* TopLevelDecl*
@@ -431,8 +482,8 @@ ApiDecl         ::= "api" IDENT ApiDecorator* "{" NEWLINE ApiDirective* RouteDec
 ApiDecorator    ::= "@version" "(" INT ")"
                   | "@style"   "(" ApiStyle ")"
 ApiStyle        ::= "rest" | "rpc" | "events"
-ApiDirective    ::= "@baseUrl" "(" STRING ")" NEWLINE
-                  | "@auth"    "(" AuthScheme ")" NEWLINE
+ApiDirective    ::= "@basePath" "(" STRING ")" NEWLINE
+                  | "@auth"     "(" AuthScheme ")" NEWLINE
 AuthScheme      ::= "bearer" | "apiKey" | "basic" | "none"
 
 RouteDecl       ::= RestRoute | RpcRoute | EventRoute
