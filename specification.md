@@ -39,6 +39,7 @@ A `.stencil` file can be comprised of the following top-level structures:
     <dd>route/procedure definitions</dd>
 </dl>
 
+
 The `model` and `input` structures are intentionally separate, following community best practices to protect against
 certain types of [input threats](https://owaspai.org/docs/2_threats_through_use/) at the request/input layer. While
 `model` types can
@@ -50,6 +51,8 @@ the file, after the `namespace` if it exists, but before any other declarations.
 
 The remaining structures (`type`, `model`, `input`, `api`) can be in any order and interleaved as needed.
 
+---
+
 ## Namespacing
 
 ```stencil
@@ -60,6 +63,8 @@ import acme.common.v1 { Page, PaginationInput, ApiError }
 
 Each file may declare at most one namespace. An `import` statement is explicit — only listed names are brought into
 scope (i.e., no "star" patterns like Java).
+
+---
 
 ## Scalars
 
@@ -76,6 +81,8 @@ Built-in scalar types:
 | `date`      | Date only          |
 | `any`       | Unconstrained type |
 
+---
+
 ## Type Aliases
 
 Type aliases resemble Go's type aliases, allowing you to create new types based on existing ones:
@@ -84,6 +91,8 @@ Type aliases resemble Go's type aliases, allowing you to create new types based 
 type Email = string
 type Cursor = string
 ```
+
+---
 
 ## Enums
 
@@ -96,6 +105,8 @@ enum UserRole {
     guest
 }
 ```
+
+---
 
 ## Models
 
@@ -143,6 +154,8 @@ structures).
 - `[]` — array (e.g. `Post[]`)
 - Both can be combined: `string[]?` (array that may be omitted or null)
 
+---
+
 ## Generics
 
 Models can declare unconstrained generic type parameters.
@@ -169,6 +182,8 @@ concrete named
 schema (e.g. `UserPage` but may vary contextually) in formats that don't support generics natively (OpenAPI, JSON
 Schema).
 
+---
+
 ## Inputs
 
 An `input` is intended purely for application inputs. This allows for more flexible data shapes and protects against
@@ -192,6 +207,8 @@ The only decorator supported by `input` is `@default(value)`, which behaves the 
 applying a default value when the field is omitted from the input.
 
 Inputs intentionally don't support `@primary`, `@relation`, or `@updatedAt` — they're pure payload shapes.
+
+---
 
 ## API
 
@@ -247,6 +264,8 @@ always of type `string`. For example, `GET /users/:id` defines a path parameter 
 > result in warnings during compilation and could be removed in a future version without a deprecation notice. For
 > endpoints that expose data models, consider defining dedicated output models without decorators to represent layered
 > object mapping, which is a common pattern in real-world applications.
+
+---
 
 ## API Styles
 
@@ -312,6 +331,8 @@ api UserEvents @style(events) {
 
 Event payloads are plain `model` declarations — no special `event` type.
 
+---
+
 ## Versioning
 
 Versioning works at two levels:
@@ -329,6 +350,8 @@ api UserService @version(2) {
     @deprecated("Use GET / with query params")
 }
 ```
+
+---
 
 ## Raw Escape Hatch
 
@@ -370,6 +393,8 @@ target name and consume their matching `@raw` block.
 | `jsonschema` | JSON Schema         | (TBD) One schema per `model` and `input`                        |
 | `mermaid`    | Mermaid `erDiagram` | (TBD) All models and `@relation` links                          |
 | `markdown`   | Markdown tables     | (TBD) Field reference per model + route listing per API         |
+
+---
 
 ## Full Example
 
