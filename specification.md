@@ -256,6 +256,21 @@ api UserService @version(2) @style(rest) {
 | `@version(n)`        | Route-level version override |
 | `@deprecated("msg")` | Mark route as deprecated     |
 
+Decorators can be applied inline (all on the same line as the route) or hanging-indented on subsequent lines. 
+The order of decorators is _not_ significant. Both styles are equivalent:
+
+**Inline decorators:**
+```stencil
+GET /:id -> User @errors(401, 404) @summary("Get user by ID")
+```
+
+**Hanging-indented decorators:**
+```stencil
+GET /:id -> User
+  @summary("Get user by ID")
+  @errors(401, 404)
+```
+
 **Path parameters** are defined inline within the route path using colon syntax (`:paramName`). Path parameters are
 always of type `string`. For example, `GET /users/:id` defines a path parameter `id` of type `string`.
 
@@ -449,11 +464,22 @@ api UserService @version(2) @style(rest) {
   @basePath("/api/v2/users")
   @auth(bearer)
 
-  GET  /      -> Page<User>           @query(PaginationInput)
-  GET  /:id   -> Result<User, ApiError> @errors(401, 404)
-  POST /      -> User                 @body(CreateUserInput) @errors(400, 409)
-  PATCH /:id  -> User                 @body(UpdateUserInput) @errors(400, 401, 404)
-  DELETE /:id -> void                 @errors(401, 404)
+  GET  /      -> Page<User>
+    @query(PaginationInput)
+
+  GET  /:id   -> Result<User, ApiError>
+    @errors(401, 404)
+
+  POST /      -> User
+    @body(CreateUserInput)
+    @errors(400, 409)
+
+  PATCH /:id  -> User
+    @body(UpdateUserInput)
+    @errors(400, 401, 404)
+
+  DELETE /:id -> void
+    @errors(401, 404)
 
   # Still-active v1 route
   GET /search -> User[] @version(1) @deprecated("Use GET / with query params")
