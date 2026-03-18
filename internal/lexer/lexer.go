@@ -12,8 +12,9 @@
 // which avoids allocations for token data. This makes the lexer memory-efficient
 // even for large input files.
 //
-// The lexer is driven by a caller using nextItem() in a for/select loop, rather
-// than spawning a separate goroutine. See lex() to create a new lexer instance.
+// The lexer accumulates all tokens in a slice during a single synchronous pass.
+// Call lex() to create a lexer and get the items slice, then use nextItem() to
+// iterate through the tokens.
 package lexer
 
 import (
@@ -39,7 +40,7 @@ var keywordsByFirstChar = func() map[byte][]string {
 type stateFn func(*lexer) stateFn
 
 // lexer holds the state of the scanner. This is based on text/template's
-// lexer but simplified for the stencil file format.
+// lexer but simplified for the spray file format.
 type lexer struct {
 	name      string // used only for error reports.
 	input     string // the string being scanned.
@@ -47,34 +48,36 @@ type lexer struct {
 	pos       Pos    // current position in the input.
 	line      int
 	startLine int
-	width     int       // width of last rune read from input.
-	items     chan item // channel of scanned items.
+	width     int      // width of last rune read from input.
+	items     []item   // accumulated items
+	index     int      // current position in items slice for iteration
 	state     stateFn
 }
 
 // run lexes the input by executing state functions until the state is nil.
 // This is the main lexing loop based on text/template's approach.
 func (l *lexer) run() {
-	for state := lexText; state != nil; {
-		l.state = state(l)
+	for l.state = lexText; l.state != nil; {
+		l.state = l.state(l)
 	}
-	close(l.items)
 }
 
-// emit passes an item back to the client.
+// emit appends an item to the items slice.
 func (l *lexer) emit(t itemType) {
-	l.items <- item{
+	l.items = append(l.items, item{
 		typ:  t,
 		val:  l.input[l.start:l.pos],
 		pos:  l.start,
 		line: l.startLine,
-	}
+	})
 	l.start = l.pos
 	l.startLine = l.line
 }
 
-func lex(name, input string) (*lexer, <-chan item) {
-	l := &lexer{
+// lex creates and returns a new lexer for the given input. Call l.run() to
+// lex the input synchronously, then use l.nextItem() to iterate over tokens.
+func lex(name, input string) *lexer {
+	return &lexer{
 		name:      name,
 		input:     input,
 		start:     0,
@@ -82,14 +85,10 @@ func lex(name, input string) (*lexer, <-chan item) {
 		line:      1,
 		startLine: 1,
 		width:     0,
-		// A buffer of 2 makes this a ring buffer; the lexer can emit 2 items before
-		// blocking, so synchronoziation isn't "immediate". This helps decouple lexer emission from caller
-		// consumption, as explained in Rob Pike's lexing video.
-		items: make(chan item, 2),
-		state: lexText,
+		items:     make([]item, 0),
+		index:     0,
+		state:     lexText,
 	}
-
-	return l, l.items
 }
 
 // lexText is the initial state that scans for keywords, operators, and other tokens.
@@ -350,16 +349,14 @@ func (l *lexer) next() (rune rune) {
 	return rune
 }
 
-// nextItem returns the next item from the input.
+// nextItem returns the next item from the items slice.
 func (l *lexer) nextItem() item {
-	for {
-		select {
-		case item := <-l.items:
-			return item
-		default:
-			l.state = l.state(l)
-		}
+	if l.index < len(l.items) {
+		item := l.items[l.index]
+		l.index++
+		return item
 	}
+	return item{typ: itemEOF}
 }
 
 // ignore skips over the pending input before this point, discarding it.
@@ -403,14 +400,14 @@ func (l *lexer) acceptRun(valid string) {
 }
 
 // errorf returns an error token and terminates the scan by passing back a
-// nil pointer that will be the next state, which is expected to terminate the caller.
+// nil pointer that will be the next state, terminating l.run.
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
-	l.items <- item{
+	l.items = append(l.items, item{
 		typ:  itemError,
 		val:  fmt.Sprintf(format, args...),
 		pos:  l.start,
 		line: l.startLine,
-	}
+	})
 	return nil
 }
 

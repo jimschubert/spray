@@ -79,19 +79,8 @@ func TestLexNamespace(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			l := &lexer{
-				name:      "test",
-				input:     tc.input,
-				start:     0,
-				pos:       0,
-				line:      1,
-				startLine: 1,
-				width:     0,
-				items:     make(chan item, 64),
-				state:     lexText,
-			}
-
-			go l.run()
+			l := lex("test", tc.input)
+			l.run()
 
 			for i, expected := range tc.expected {
 				got := l.nextItem()
@@ -156,19 +145,8 @@ func TestLexOperators(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			l := &lexer{
-				name:      "test",
-				input:     tc.input,
-				start:     0,
-				pos:       0,
-				line:      1,
-				startLine: 1,
-				width:     0,
-				items:     make(chan item, 64),
-				state:     lexText,
-			}
-
-			go l.run()
+			l := lex("test", tc.input)
+			l.run()
 
 			for i, expected := range tc.expected {
 				got := l.nextItem()
@@ -220,19 +198,8 @@ func TestLexNumbers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			l := &lexer{
-				name:      "test",
-				input:     tc.input,
-				start:     0,
-				pos:       0,
-				line:      1,
-				startLine: 1,
-				width:     0,
-				items:     make(chan item, 64),
-				state:     lexText,
-			}
-
-			go l.run()
+			l := lex("test", tc.input)
+			l.run()
 
 			for i, expected := range tc.expected {
 				got := l.nextItem()
@@ -298,19 +265,8 @@ func TestLexIdentifiers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			l := &lexer{
-				name:      "test",
-				input:     tc.input,
-				start:     0,
-				pos:       0,
-				line:      1,
-				startLine: 1,
-				width:     0,
-				items:     make(chan item, 64),
-				state:     lexText,
-			}
-
-			go l.run()
+			l := lex("test", tc.input)
+			l.run()
 
 			for i, expected := range tc.expected {
 				got := l.nextItem()
@@ -398,19 +354,8 @@ func TestLexStrings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			l := &lexer{
-				name:      "test",
-				input:     tc.input,
-				start:     0,
-				pos:       0,
-				line:      1,
-				startLine: 1,
-				width:     0,
-				items:     make(chan item, 64),
-				state:     lexText,
-			}
-
-			go l.run()
+			l := lex("test", tc.input)
+			l.run()
 
 			for i, expected := range tc.expected {
 				got := l.nextItem()
