@@ -1,44 +1,81 @@
 package lexer
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestLexTextNamespace(t *testing.T) {
+func TestLexNamespace(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
 		name     string
 		input    string
-		expected []itemType
+		expected []struct {
+			typ itemType
+			val string
+		}
 	}{
 		{
-			name:  "standalone namespace keyword",
-			input: "namespace acme.users.v1",
-			expected: []itemType{
-				itemNamespace,
-				itemText,
-				itemEOF,
+			name:  "simple namespace declaration",
+			input: "namespace acme\n",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemKeywordNamespace, "namespace"},
+				{itemIdent, "acme"},
+				{itemNewline, "\n"},
+				{itemEOF, ""},
 			},
 		},
 		{
-			name:  "keyword prefix is not namespace token",
-			input: "namespacex acme.users.v1",
-			expected: []itemType{
-				itemText,
-				itemEOF,
+			name:  "qualified namespace",
+			input: "namespace acme.users.v1\n",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemKeywordNamespace, "namespace"},
+				{itemIdent, "acme"},
+				{itemDot, "."},
+				{itemIdent, "users"},
+				{itemDot, "."},
+				{itemIdent, "v1"},
+				{itemNewline, "\n"},
+				{itemEOF, ""},
 			},
 		},
 		{
-			name:  "text before namespace",
-			input: "hello namespace acme.users.v1",
-			expected: []itemType{
-				itemError,
+			name:  "namespace with comment",
+			input: "namespace acme # our namespace\n",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemKeywordNamespace, "namespace"},
+				{itemIdent, "acme"},
+				{itemComment, "# our namespace"},
+				{itemNewline, "\n"},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "keyword prefix is not namespace",
+			input: "namespacex acme\n",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemIdent, "namespacex"},
+				{itemIdent, "acme"},
+				{itemNewline, "\n"},
+				{itemEOF, ""},
 			},
 		},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -50,52 +87,340 @@ func TestLexTextNamespace(t *testing.T) {
 				line:      1,
 				startLine: 1,
 				width:     0,
-				items:     make(chan item, 8),
+				items:     make(chan item, 64),
 				state:     lexText,
 			}
 
-			var got []itemType
-			for {
-				it := l.nextItem()
-				got = append(got, it.typ)
-				if it.typ == itemEOF || it.typ == itemError {
-					break
+			go l.run()
+
+			for i, expected := range tc.expected {
+				got := l.nextItem()
+				if got.typ != expected.typ {
+					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
 				}
-			}
-
-			if len(got) != len(tc.expected) {
-				t.Fatalf("token count mismatch: got=%v expected=%v", got, tc.expected)
-			}
-
-			for i := range tc.expected {
-				if got[i] != tc.expected[i] {
-					t.Fatalf("token mismatch at index %d: got=%v expected=%v", i, got[i], tc.expected[i])
+				if got.val != expected.val {
+					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
 				}
 			}
 		})
 	}
 }
 
-func TestLexTextNamespaceTokenValue(t *testing.T) {
+func TestLexOperators(t *testing.T) {
 	t.Parallel()
 
-	l := &lexer{
-		name:      "test",
-		input:     "namespace acme.users.v1",
-		start:     0,
-		pos:       0,
-		line:      1,
-		startLine: 1,
-		width:     0,
-		items:     make(chan item, 8),
-		state:     lexText,
+	testCases := []struct {
+		name     string
+		input    string
+		expected []itemType
+	}{
+		{
+			name:  "braces",
+			input: "{ }",
+			expected: []itemType{
+				itemLeftBrace, itemRightBrace, itemEOF,
+			},
+		},
+		{
+			name:  "parentheses",
+			input: "( )",
+			expected: []itemType{
+				itemLeftParen, itemRightParen, itemEOF,
+			},
+		},
+		{
+			name:  "brackets",
+			input: "[ ]",
+			expected: []itemType{
+				itemLeftBracket, itemRightBracket, itemEOF,
+			},
+		},
+		{
+			name:  "arrow",
+			input: "->",
+			expected: []itemType{
+				itemArrow, itemEOF,
+			},
+		},
+		{
+			name:  "various operators",
+			input: ": , . @ = ? /",
+			expected: []itemType{
+				itemColon, itemComma, itemDot, itemAt, itemEquals, itemQuestion, itemSlash, itemEOF,
+			},
+		},
 	}
 
-	first := l.nextItem()
-	if first.typ != itemNamespace {
-		t.Fatalf("first token type: got=%v expected=%v", first.typ, itemNamespace)
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := &lexer{
+				name:      "test",
+				input:     tc.input,
+				start:     0,
+				pos:       0,
+				line:      1,
+				startLine: 1,
+				width:     0,
+				items:     make(chan item, 64),
+				state:     lexText,
+			}
+
+			go l.run()
+
+			for i, expected := range tc.expected {
+				got := l.nextItem()
+				if got.typ != expected {
+					t.Errorf("token %d: got=%v expected=%v", i, got.typ, expected)
+				}
+			}
+		})
 	}
-	if first.val != "namespace" {
-		t.Fatalf("namespace token value: got=%q expected=%q", first.val, "namespace")
+}
+
+func TestLexNumbers(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected []struct {
+			typ itemType
+			val string
+		}
+	}{
+		{
+			name:  "integer",
+			input: "123",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemInt, "123"},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "float",
+			input: "3.14",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemFloat, "3.14"},
+				{itemEOF, ""},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := &lexer{
+				name:      "test",
+				input:     tc.input,
+				start:     0,
+				pos:       0,
+				line:      1,
+				startLine: 1,
+				width:     0,
+				items:     make(chan item, 64),
+				state:     lexText,
+			}
+
+			go l.run()
+
+			for i, expected := range tc.expected {
+				got := l.nextItem()
+				if got.typ != expected.typ {
+					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
+				}
+				if got.val != expected.val {
+					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
+				}
+			}
+		})
+	}
+}
+
+func TestLexIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected []struct {
+			typ itemType
+			val string
+		}
+	}{
+		{
+			name:  "simple identifier",
+			input: "foo",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemIdent, "foo"},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "identifier with underscores",
+			input: "foo_bar_baz",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemIdent, "foo_bar_baz"},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "identifier starting with underscore",
+			input: "_internal",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemIdent, "_internal"},
+				{itemEOF, ""},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := &lexer{
+				name:      "test",
+				input:     tc.input,
+				start:     0,
+				pos:       0,
+				line:      1,
+				startLine: 1,
+				width:     0,
+				items:     make(chan item, 64),
+				state:     lexText,
+			}
+
+			go l.run()
+
+			for i, expected := range tc.expected {
+				got := l.nextItem()
+				if got.typ != expected.typ {
+					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
+				}
+				if got.val != expected.val {
+					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
+				}
+			}
+		})
+	}
+}
+
+func TestLexStrings(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected []struct {
+			typ itemType
+			val string
+		}
+	}{
+		{
+			name:  "simple string",
+			input: `"hello"`,
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemString, `"hello"`},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "string with spaces",
+			input: `"hello world"`,
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemString, `"hello world"`},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "string with escape sequences",
+			input: `"hello\nworld\t!"`,
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemString, `"hello\nworld\t!"`},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "string with escaped quote",
+			input: `"say \"hi\""`,
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemString, `"say \"hi\""`},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "string with backslash",
+			input: `"path\\to\\file"`,
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemString, `"path\\to\\file"`},
+				{itemEOF, ""},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := &lexer{
+				name:      "test",
+				input:     tc.input,
+				start:     0,
+				pos:       0,
+				line:      1,
+				startLine: 1,
+				width:     0,
+				items:     make(chan item, 64),
+				state:     lexText,
+			}
+
+			go l.run()
+
+			for i, expected := range tc.expected {
+				got := l.nextItem()
+				if got.typ != expected.typ {
+					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
+				}
+				if got.val != expected.val {
+					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
+				}
+			}
+		})
 	}
 }
