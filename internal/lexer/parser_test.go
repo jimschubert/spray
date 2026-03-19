@@ -2,6 +2,8 @@ package lexer
 
 import (
 	"testing"
+
+	"github.com/alecthomas/assert/v2"
 )
 
 func TestParseNamespace(t *testing.T) {
@@ -73,37 +75,20 @@ func TestParseNamespace(t *testing.T) {
 			t.Parallel()
 
 			p, err := New()
-			if err != nil {
-				t.Fatalf("New() error: %v", err)
-			}
+			assert.NoError(t, err)
 
 			stencil, err := p.Parse(tc.input)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("Parse() error = %v, wantErr %v", err, tc.wantErr)
-			}
 			if tc.wantErr {
+				assert.Error(t, err)
 				return
 			}
+			assert.NoError(t, err)
 
-			if stencil.Namespace == nil {
-				t.Fatal("expected namespace, got nil")
-			}
-
-			if stencil.Namespace.FullName() != tc.expectedNamespace {
-				t.Errorf("namespace mismatch: got=%q expected=%q", stencil.Namespace.FullName(), tc.expectedNamespace)
-			}
-
-			if len(stencil.Comments) != tc.expectedDocumentComments {
-				t.Errorf("comment count mismatch: got=%d expected=%d", len(stencil.Comments), tc.expectedDocumentComments)
-			}
-
-			if stencil.Namespace.HeadComment.String() != tc.headComment {
-				t.Errorf("head comment mismatch: got=%q expected=%q", stencil.Namespace.HeadComment.String(), tc.headComment)
-			}
-
-			if stencil.Namespace.LineComment.String() != tc.lineComment {
-				t.Errorf("line comment mismatch: got=%q expected=%q", stencil.Namespace.LineComment.String(), tc.lineComment)
-			}
+			assert.NotZero(t, stencil.Namespace, "expected namespace, got nil")
+			assert.Equal(t, tc.expectedNamespace, stencil.Namespace.FullName())
+			assert.Equal(t, tc.expectedDocumentComments, len(stencil.Comments))
+			assert.Equal(t, tc.headComment, stencil.Namespace.HeadComment.String())
+			assert.Equal(t, tc.lineComment, stencil.Namespace.LineComment.String())
 		})
 	}
 }
@@ -156,48 +141,31 @@ func TestParseImport(t *testing.T) {
 			t.Parallel()
 
 			p, err := New()
-			if err != nil {
-				t.Fatalf("New() error: %v", err)
-			}
+			assert.NoError(t, err)
 
 			stencil, err := p.Parse(tc.input)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("Parse() error = %v, wantErr %v", err, tc.wantErr)
-			}
 			if tc.wantErr {
+				assert.Error(t, err)
 				return
 			}
+			assert.NoError(t, err)
 
-			if len(stencil.Imports) != 1 {
-				t.Fatalf("expected 1 import, got %d", len(stencil.Imports))
-			}
+			assert.Equal(t, 1, len(stencil.Imports), "expected 1 import")
 
 			imp := stencil.Imports[0]
-			if imp.Path.String() != "acme.common.v1" {
-				t.Errorf("import path mismatch: got=%q expected=%q", imp.Path.String(), "acme.common.v1")
-			}
-
-			if len(imp.Names) != len(tc.expected) {
-				t.Fatalf("import names count mismatch: got=%d expected=%d", len(imp.Names), len(tc.expected))
-			}
+			assert.Equal(t, "acme.common.v1", imp.Path.String())
+			assert.Equal(t, len(tc.expected), len(imp.Names))
 
 			for i, name := range tc.expected {
-				if imp.Names[i].Value != name {
-					t.Errorf("import name %d mismatch: got=%q expected=%q", i, imp.Names[i].Value, name)
-				}
+				assert.Equal(t, name, imp.Names[i].Value)
 			}
 
-			if imp.HeadComment != nil && imp.HeadComment.Comments[0].Text != tc.headComment {
-				t.Errorf("head comment mismatch: got=%q expected=%q", imp.HeadComment.Comments[0].Text, tc.headComment)
+			if imp.HeadComment != nil && tc.headComment != "" {
+				assert.Equal(t, tc.headComment, imp.HeadComment.Comments[0].Text)
 			}
 
-			if imp.LineComment.String() != tc.lineComment {
-				t.Errorf("line comment mismatch: got=%q expected=%q", imp.LineComment.String(), tc.lineComment)
-			}
-
-			if len(stencil.Comments) != tc.expectedDocumentComments {
-				t.Errorf("document comment count mismatch: got=%d expected=%d", len(stencil.Comments), tc.expectedDocumentComments)
-			}
+			assert.Equal(t, tc.lineComment, imp.LineComment.String())
+			assert.Equal(t, tc.expectedDocumentComments, len(stencil.Comments))
 		})
 	}
 }
@@ -233,32 +201,22 @@ func TestParseImport_FQNs(t *testing.T) {
 			t.Parallel()
 
 			p, err := New()
-			if err != nil {
-				t.Fatalf("New() error: %v", err)
-			}
+			assert.NoError(t, err)
 
 			stencil, err := p.Parse(tc.input)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("Parse() error = %v, wantErr %v", err, tc.wantErr)
-			}
-
 			if tc.wantErr {
+				assert.Error(t, err)
 				return
 			}
+			assert.NoError(t, err)
 
-			if len(stencil.Imports) != 1 {
-				t.Fatalf("expected 1 import, got %d", len(stencil.Imports))
-			}
+			assert.Equal(t, 1, len(stencil.Imports), "expected 1 import")
 
 			actualFQNs := stencil.Imports[0].FQNs()
-			if len(actualFQNs) != len(tc.expectedFQNs) {
-				t.Fatalf("FQN count mismatch: got=%d expected=%d", len(actualFQNs), len(tc.expectedFQNs))
-			}
+			assert.Equal(t, len(tc.expectedFQNs), len(actualFQNs))
 
 			for i, expected := range tc.expectedFQNs {
-				if actualFQNs[i] != expected {
-					t.Errorf("FQN %d mismatch: got=%q expected=%q", i, actualFQNs[i], expected)
-				}
+				assert.Equal(t, expected, actualFQNs[i])
 			}
 		})
 	}
@@ -343,45 +301,31 @@ func TestParseImport_Multiple(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			p, err := New()
-			if err != nil {
-				t.Fatalf("New() error: %v", err)
-			}
+			assert.NoError(t, err)
 
 			stencil, err := p.Parse(tc.input)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("Parse() error = %v, wantErr %v", err, tc.wantErr)
-			}
-
 			if tc.wantErr {
+				assert.Error(t, err)
 				return
 			}
+			assert.NoError(t, err)
 
-			if len(stencil.Imports) != len(tc.expected) {
-				t.Fatalf("expected %d import, got %d", len(tc.expected), len(stencil.Imports))
-			}
+			assert.Equal(t, len(tc.expected), len(stencil.Imports))
 
 			for idx, expected := range tc.expected {
 				imp := stencil.Imports[idx]
 
-				if len(imp.Names) != len(expected.expectedTypeNames) {
-					t.Fatalf("import names count mismatch: got=%d expected=%d", len(imp.Names), len(expected.expectedTypeNames))
-				}
+				assert.Equal(t, len(expected.expectedTypeNames), len(imp.Names))
 
 				for i, name := range expected.expectedTypeNames {
-					if imp.Names[i].Value != name {
-						t.Errorf("import name %d mismatch: got=%q expected=%q", i, imp.Names[i].Value, name)
-					}
+					assert.Equal(t, name, imp.Names[i].Value)
 				}
 
 				actualFQNs := imp.FQNs()
-				if len(actualFQNs) != len(expected.expectedFQNs) {
-					t.Fatalf("FQN count mismatch: got=%d expected=%d", len(actualFQNs), len(expected.expectedFQNs))
-				}
+				assert.Equal(t, len(expected.expectedFQNs), len(actualFQNs))
 
 				for i, expectedFQN := range expected.expectedFQNs {
-					if actualFQNs[i] != expectedFQN {
-						t.Errorf("FQN %d mismatch: got=%q expected=%q", i, actualFQNs[i], expectedFQN)
-					}
+					assert.Equal(t, expectedFQN, actualFQNs[i])
 				}
 			}
 		})

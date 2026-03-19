@@ -2,11 +2,11 @@ package lexer
 
 import (
 	"testing"
+
+	"github.com/alecthomas/assert/v2"
 )
 
 func TestLexNamespace(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name     string
 		input    string
@@ -75,29 +75,22 @@ func TestLexNamespace(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			l := lex("test", tc.input)
 			l.run()
 
-			for i, expected := range tc.expected {
+			for _, expected := range tc.expected {
 				got := l.nextItem()
-				if got.typ != expected.typ {
-					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
-				}
-				if got.val != expected.val {
-					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
-				}
+				assert.Equal(t, expected.typ, got.typ)
+				assert.Equal(t, expected.val, got.val)
 			}
 		})
 	}
 }
 
 func TestLexOperators(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name     string
 		input    string
@@ -141,26 +134,21 @@ func TestLexOperators(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			l := lex("test", tc.input)
 			l.run()
 
-			for i, expected := range tc.expected {
+			for _, expected := range tc.expected {
 				got := l.nextItem()
-				if got.typ != expected {
-					t.Errorf("token %d: got=%v expected=%v", i, got.typ, expected)
-				}
+				assert.Equal(t, expected, got.typ)
 			}
 		})
 	}
 }
 
 func TestLexNumbers(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name     string
 		input    string
@@ -194,29 +182,22 @@ func TestLexNumbers(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			l := lex("test", tc.input)
 			l.run()
 
-			for i, expected := range tc.expected {
+			for _, expected := range tc.expected {
 				got := l.nextItem()
-				if got.typ != expected.typ {
-					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
-				}
-				if got.val != expected.val {
-					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
-				}
+				assert.Equal(t, expected.typ, got.typ)
+				assert.Equal(t, expected.val, got.val)
 			}
 		})
 	}
 }
 
 func TestLexIdentifiers(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name     string
 		input    string
@@ -261,29 +242,22 @@ func TestLexIdentifiers(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			l := lex("test", tc.input)
 			l.run()
 
-			for i, expected := range tc.expected {
+			for _, expected := range tc.expected {
 				got := l.nextItem()
-				if got.typ != expected.typ {
-					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
-				}
-				if got.val != expected.val {
-					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
-				}
+				assert.Equal(t, expected.typ, got.typ)
+				assert.Equal(t, expected.val, got.val)
 			}
 		})
 	}
 }
 
 func TestLexStrings(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name     string
 		input    string
@@ -350,21 +324,16 @@ func TestLexStrings(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			l := lex("test", tc.input)
 			l.run()
 
-			for i, expected := range tc.expected {
+			for _, expected := range tc.expected {
 				got := l.nextItem()
-				if got.typ != expected.typ {
-					t.Errorf("token %d type mismatch: got=%v expected=%v", i, got.typ, expected.typ)
-				}
-				if got.val != expected.val {
-					t.Errorf("token %d value mismatch: got=%q expected=%q", i, got.val, expected.val)
-				}
+				assert.Equal(t, expected.typ, got.typ)
+				assert.Equal(t, expected.val, got.val)
 			}
 		})
 	}
