@@ -67,7 +67,7 @@ func (p *parserState) expect(typ itemType) (item, error) {
 	if it.typ != typ {
 		return it, &ParsingError{
 			Pos:     itemPos(it),
-			Message: fmt.Sprintf("expected %v but got %v", typ, it.typ),
+			Message: fmt.Sprintf("expected a %q but got a %q", symbolsDescriptions[typ], symbolsDescriptions[it.typ]),
 		}
 	}
 	return it, nil
@@ -95,6 +95,14 @@ func itemPos(i item) ast.Position {
 	return ast.Position{Line: i.line, Col: int(i.pos)}
 }
 
+// itemStringLiteral converts an item to an ast.StringLiteral
+func itemStringLiteral(i item) ast.StringLiteral {
+	return ast.StringLiteral{
+		Pos:   itemPos(i),
+		Value: i.val,
+	}
+}
+
 // parseNamespace parses a namespace declaration, e.g.:
 //
 //	namespace QualifiedIdent NEWLINE
@@ -115,27 +123,11 @@ func (p *parserState) parseNamespace(leading *ast.Comment) (*ast.Namespace, erro
 		HeadComment: leading,
 	}
 
-	// can be single identifier like acme, or qualified like acme.users.v1
-	first, err := p.expect(itemIdent)
+	qi, err := p.parseQualifiedIdent("namespace")
 	if err != nil {
-		return nil, &ParsingError{Pos: itemPos(first), Message: "expected identifier after 'namespace'"}
+		return nil, err
 	}
-
-	qi := ast.QualifiedIdent{
-		Pos:   itemPos(first),
-		Parts: []string{first.val},
-	}
-
-	for p.peek().typ == itemDot {
-		p.next() // consume dot
-		part, err := p.expect(itemIdent)
-		if err != nil {
-			return nil, &ParsingError{Pos: itemPos(part), Message: "expected identifier after '.'"}
-		}
-		qi.Parts = append(qi.Parts, part.val)
-	}
-
-	ns.Name = qi
+	ns.Name = *qi
 
 	if p.peek().typ == itemComment {
 		comment := p.next() // consume comment
@@ -148,7 +140,99 @@ func (p *parserState) parseNamespace(leading *ast.Comment) (*ast.Namespace, erro
 	return ns, nil
 }
 
+func (p *parserState) parseImport(commentGroup *ast.CommentGroup) (*ast.Import, error) {
+	kw, err := p.expect(itemKeywordImport)
+	if err != nil {
+		return nil, err
+	}
+
+	imp := &ast.Import{
+		Pos:         itemPos(kw),
+		HeadComment: commentGroup,
+	}
+
+	// must start with a string, not dot or other
+	if p.peek().typ != itemIdent {
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier after 'import'"}
+	}
+
+	qi, err := p.parseQualifiedIdent("import")
+	if err != nil {
+		return nil, err
+	}
+	imp.Path = *qi
+
+	// { Name [, Name] }
+	_, err = p.expect(itemLeftBrace)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		if p.peek().typ != itemIdent {
+			// don't allow empty grouping or undefined after comma; the trailing brace will be handled via peek later on identifier
+			return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier in import name list"}
+		}
+
+		imp.Names = append(imp.Names, itemStringLiteral(p.next())) // consume name
+
+		if p.peek().typ == itemComma {
+			p.next() // consume comma but next needs to be an identifier
+			continue
+		} else if p.peek().typ == itemRightBrace {
+			// don't consume yet, just exit loop
+			break
+		} else {
+			return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected ',' or '}' in import name list"}
+		}
+	}
+
+	_, err = p.expect(itemRightBrace)
+	if err != nil {
+		return nil, err
+	}
+
+	if p.peek().typ == itemComment {
+		comment := p.next() // consume comment
+		imp.LineComment = &ast.Comment{
+			Pos:  itemPos(comment),
+			Text: comment.val,
+		}
+	}
+
+	return imp, nil
+}
+
+func (p *parserState) parseQualifiedIdent(context string) (*ast.QualifiedIdent, error) {
+	if p.peek().typ != itemIdent {
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: fmt.Sprintf("expected identifier after %q", context)}
+	}
+	qi := &ast.QualifiedIdent{
+		Pos:   itemPos(p.peek()),
+		Parts: []string{p.next().val},
+	}
+
+	for p.peek().typ == itemDot {
+		p.next() // consume dot
+		if p.peek().typ != itemIdent {
+			return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier after '.'"}
+		}
+		qi.Parts = append(qi.Parts, p.next().val)
+	}
+
+	return qi, nil
+}
+
+// semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
+// duplicate declarations, imports defined after models, etc.)
+func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
+	// TODO: imports must come before any models, apis, or other declarations, but after namespace
+	// TODO: warnings on duplicate imported types
+	return nil
+}
+
 // Parse both lexes and parses the input, returning the root Stencil AST node.
+// The AST semantics are validated prior to return.
+// NOTE: the AST is non-nil in the event of an error, allowing the caller to inspect the partially constructed AST.
 func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 	l := lex("input", text)
 	l.run()
@@ -176,7 +260,8 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 				}
 			}
 
-			return stencil, nil
+			err := p.semanticValidation(stencil)
+			return stencil, err
 
 		case itemError:
 			pp.next()
@@ -194,6 +279,7 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			}
 
 			if stencil.Namespace != nil {
+				// syntax error, not semantic, since multiple namespaces are not allowed in a single file
 				return nil, &ParsingError{
 					Pos:     itemPos(it),
 					Message: "multiple namespace declarations are not allowed",
@@ -206,6 +292,25 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			}
 
 			stencil.Namespace = ns
+
+		case itemKeywordImport:
+			var commentGroup *ast.CommentGroup
+
+			// any grouping of comments (those immediately preceding import) are a comment "group" heading
+			if len(comments) > 0 {
+				commentGroup = &ast.CommentGroup{Comments: comments}
+				// trim from file comments
+				stencil.Comments = stencil.Comments[:len(stencil.Comments)-len(comments)]
+			}
+
+			i, err := pp.parseImport(commentGroup)
+			if err != nil {
+				return nil, err
+			}
+
+			if i != nil {
+				stencil.Imports = append(stencil.Imports, *i)
+			}
 
 		default:
 			pp.next()

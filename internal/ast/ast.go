@@ -1,5 +1,7 @@
 package ast
 
+import "strings"
+
 // Position represents the line and column of a node in the source file.
 type Position struct {
 	Line int
@@ -9,6 +11,12 @@ type Position struct {
 // Node is the base interface for all AST nodes.
 type Node interface {
 	Position() Position
+}
+
+// SpecNode is an interface which is used for type specifications (api, model, input, enum, aliases) and is used to distinguish them from other nodes (e.g. comments).
+type SpecNode interface {
+	Node
+	specNode() // disallows using other Node values where SpecNode is required; strategy taken from Go's own ast package
 }
 
 // QualifiedIdent represents a qualified identifier, a dot-delimited set of identifiers (e.g., foo.bar.baz).
@@ -32,7 +40,7 @@ func (q *QualifiedIdent) String() string {
 	return result
 }
 
-// StringLiteral represents a string literal in the source file.
+// StringLiteral represents a string literal in the source file. (i.e. IDENT)
 type StringLiteral struct {
 	Pos   Position
 	Value string
@@ -40,6 +48,54 @@ type StringLiteral struct {
 
 func (s *StringLiteral) Position() Position {
 	return s.Pos
+}
+
+type Comment struct {
+	Pos  Position
+	Text string
+}
+
+func (c *Comment) Position() Position {
+	return c.Pos
+}
+
+func (c *Comment) String() string {
+	if c == nil {
+		return ""
+	}
+	return c.Text
+}
+
+// CommentGroup represents a comment block to be associated with some other definition.
+// This strategy for grouping comments is taken from go's AST package.
+type CommentGroup struct {
+	Comments []*Comment
+}
+
+func (cg *CommentGroup) Position() Position {
+	if len(cg.Comments) == 0 {
+		return Position{}
+	}
+	return cg.Comments[0].Position()
+}
+
+func (cg *CommentGroup) String() string {
+	if cg == nil || len(cg.Comments) == 0 {
+		return ""
+	}
+
+	sb := strings.Builder{}
+	for _, comment := range cg.Comments {
+		if comment != nil {
+			sb.WriteString(comment.String())
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
+}
+
+func (cg *CommentGroup) IsEmpty() bool {
+	return len(cg.Comments) == 0
 }
 
 // Namespace represents a namespace declaration, which has a qualified identifier and comments.
@@ -60,25 +116,42 @@ func (n *Namespace) FullName() string {
 	return n.Name.String()
 }
 
-type Comment struct {
-	Pos  Position
-	Text string
+// Import represents an imported type declaration.
+type Import struct {
+	Pos         Position
+	Path        QualifiedIdent
+	Names       []StringLiteral
+	HeadComment *CommentGroup
+	LineComment *Comment
 }
 
-func (c *Comment) Position() Position {
-	return c.Pos
+func (i *Import) Position() Position {
+	return i.Pos
 }
 
-func (c *Comment) String() string {
-	if c == nil {
-		return ""
+// FQNs returns the fully qualified names of the imported symbols, e.g. ["acme.common.v1.Page", "acme.common.v1.PaginationInput"].
+func (i *Import) FQNs() []string {
+	var fqns []string
+	for _, n := range i.Names {
+		fqns = append(fqns, i.Path.String()+"."+n.Value)
 	}
-	return c.Text
+	return fqns
+}
+
+func (i *Import) String() string {
+	var names []string
+	for _, n := range i.Names {
+		names = append(names, n.Value)
+	}
+	return "import " + i.Path.String() + " { " + strings.Join(names, ", ") + " }"
 }
 
 // Stencil represents the entire parsed file. This will be used for any code generation.
 type Stencil struct {
 	Comments  []*Comment
 	Namespace *Namespace
-	// TODO
+	Imports   []Import
+
+	// Specs is imports, models, inputs, type aliases, enums, etc. in the order they were defined in the source file.
+	Specs []SpecNode
 }

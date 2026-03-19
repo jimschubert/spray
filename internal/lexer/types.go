@@ -213,6 +213,30 @@ const (
 	eof            = -1
 
 	digits = "0123456789"
+
+	// human readable token descriptions
+	itemIdentString  = "identifier"
+	itemStringString = "string"
+	itemIntString    = "integer"
+	itemFloatString  = "float"
+
+	itemLeftBraceString    = "{"
+	itemRightBraceString   = "}"
+	itemLeftParenString    = "("
+	itemRightParenString   = ")"
+	itemLeftBracketString  = "["
+	itemRightBracketString = "]"
+	itemLeftAngleString    = "<"
+	itemRightAngleString   = ">"
+	itemColonString        = ":"
+	itemCommaString        = ","
+	itemDotString          = "."
+	itemDashString         = "-"
+	itemArrowString        = "->"
+	itemAtString           = "@"
+	itemEqualsString       = "="
+	itemQuestionString     = "?"
+	itemSlashString        = "/"
 )
 
 var keywords = map[string]itemType{
@@ -269,3 +293,35 @@ var keywords = map[string]itemType{
 	keywordDate:       itemKeywordDate,
 	keywordAny:        itemKeywordAny,
 }
+
+var symbolsDescriptions = func() map[itemType]string {
+	sym := map[itemType]string{
+		itemIdent:        itemIdentString,
+		itemString:       itemStringString,
+		itemInt:          itemIntString,
+		itemFloat:        itemFloatString,
+		itemLeftBrace:    itemLeftBraceString,
+		itemRightBrace:   itemRightBraceString,
+		itemLeftParen:    itemLeftParenString,
+		itemRightParen:   itemRightParenString,
+		itemLeftBracket:  itemLeftBracketString,
+		itemRightBracket: itemRightBracketString,
+		itemLeftAngle:    itemLeftAngleString,
+		itemRightAngle:   itemRightAngleString,
+		itemColon:        itemColonString,
+		itemComma:        itemCommaString,
+		itemDot:          itemDotString,
+		itemDash:         itemDashString,
+		itemArrow:        itemArrowString,
+		itemAt:           itemAtString,
+		itemEquals:       itemEqualsString,
+		itemQuestion:     itemQuestionString,
+		itemSlash:        itemSlashString,
+	}
+
+	for key := range keywords {
+		sym[keywords[key]] = key
+	}
+
+	return sym
+}()
