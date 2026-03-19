@@ -64,6 +64,15 @@ import acme.common.v1 { Page, PaginationInput, ApiError }
 Each file may declare at most one namespace. An `import` statement is explicit — only listed names are brought into
 scope (i.e., no "star" patterns like Java).
 
+A namespace may have a single leading comment and an optional line comment:
+
+```stencil
+# This is a document-level comment
+
+# This comment is "attached" to namespace
+namespace acme.users.v2 # this is a line comment on the namespace declaration
+```
+
 ---
 
 ## Scalars

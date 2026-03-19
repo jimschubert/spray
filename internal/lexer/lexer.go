@@ -48,9 +48,9 @@ type lexer struct {
 	pos       Pos    // current position in the input.
 	line      int
 	startLine int
-	width     int      // width of last rune read from input.
-	items     []item   // accumulated items
-	index     int      // current position in items slice for iteration
+	width     int    // width of last rune read from input.
+	items     []item // accumulated items
+	index     int    // current position in items slice for iteration
 	state     stateFn
 }
 
@@ -268,7 +268,7 @@ func lexComment(l *lexer) stateFn {
 }
 
 // lexString consumes a string literal and emits it as a token.
-// Escape characters (\n, \t, \r, \\, \", \/) are passed through to the parser for validation.
+// Escape characters (\n, \t, \r, \\, \", \/) are passed through to the parserState for validation.
 func lexString(l *lexer) stateFn {
 	l.next() // consumes open quote
 	for {
@@ -280,7 +280,7 @@ func lexString(l *lexer) stateFn {
 			l.emit(itemString)
 			return lexText
 		}
-		// escapes char (validation will be done in the parser)
+		// escapes char (validation will be done in the parserState)
 		if r == '\\' {
 			next := l.next()
 			if next == eof {
