@@ -17,6 +17,13 @@ func TestParseNamespace(t *testing.T) {
 		wantErr                  bool
 	}{
 		{
+			name:                     "default namespace",
+			input:                    "# file with no namespace\n",
+			expectedNamespace:        "default",
+			expectedDocumentComments: 1,
+			wantErr:                  false,
+		},
+		{
 			name:                     "simple namespace",
 			input:                    "namespace acme\n",
 			expectedNamespace:        "acme",

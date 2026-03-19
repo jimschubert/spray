@@ -48,6 +48,8 @@ type Namespace struct {
 	Name        QualifiedIdent
 	HeadComment *Comment
 	LineComment *Comment
+	// Implicit determines whether the namespace was implicitly created by the parser (e.g. "default") or user-defined.
+	Implicit bool
 }
 
 func (n *Namespace) Position() Position {

@@ -61,8 +61,9 @@ namespace acme.users.v2
 import acme.common.v1 { Page, PaginationInput, ApiError }
 ```
 
-Each file may declare at most one namespace. An `import` statement is explicit — only listed names are brought into
-scope (i.e., no "star" patterns like Java).
+Each file may declare at most one namespace. If no namespace is defined, the parser will create an implicit "default" namespace.
+
+An `import` statement is explicit — only listed names are brought into scope (i.e., no "star" patterns like Java).
 
 A namespace may have a single leading comment and an optional line comment:
 

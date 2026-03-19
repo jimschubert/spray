@@ -167,6 +167,15 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 		switch it.typ {
 		case itemEOF:
 			pp.next()
+
+			if stencil.Namespace == nil {
+				stencil.Namespace = &ast.Namespace{
+					Name: ast.QualifiedIdent{
+						Parts: []string{"default"}},
+					Implicit: true,
+				}
+			}
+
 			return stencil, nil
 
 		case itemError:
