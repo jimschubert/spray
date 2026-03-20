@@ -116,6 +116,32 @@ enum UserRole {
 }
 ```
 
+Enum elements may be separated by commas, allowing for compact single-line definitions. The preference is for each 
+element on a separate line without commas, but both styles are supported:
+
+**Multi-line (preferred):**
+```stencil
+enum UserRole {
+    admin
+    member
+    guest
+}
+```
+
+**Single-line (comma-separated):**
+```stencil
+enum Status { ACTIVE, INACTIVE }
+```
+
+**Mixed (trailing comma allowed):**
+```stencil
+enum Color {
+    RED,
+    GREEN,
+    BLUE,
+}
+```
+
 ---
 
 ## Models
@@ -522,8 +548,8 @@ IdentList       ::= IDENT ("," IDENT)*
 
 TypeAliasDecl   ::= "type" IDENT "=" TypeExpr NEWLINE
 
-EnumDecl        ::= "enum" IDENT "{" NEWLINE EnumValue+ "}"
-EnumValue       ::= IDENT NEWLINE
+EnumDecl        ::= "enum" IDENT "{" EnumValue* "}"
+EnumValue       ::= IDENT ("," | NEWLINE)?
 
 ModelDecl       ::= "model" IDENT GenericParams? "{" NEWLINE FieldDecl* RawBlock* "}"
 InputDecl       ::= "input" IDENT GenericParams? "{" NEWLINE FieldDecl* "}"

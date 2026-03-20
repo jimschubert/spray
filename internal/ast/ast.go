@@ -146,6 +146,19 @@ func (i *Import) String() string {
 	return "import " + i.Path.String() + " { " + strings.Join(names, ", ") + " }"
 }
 
+type Enum struct {
+	Pos         Position
+	Name        StringLiteral
+	Elements    []StringLiteral
+	HeadComment *Comment
+}
+
+func (e *Enum) Position() Position {
+	return e.Pos
+}
+
+func (e *Enum) specNode() {}
+
 // Stencil represents the entire parsed file. This will be used for any code generation.
 type Stencil struct {
 	Comments  []*Comment

@@ -75,6 +75,7 @@ func (p *parserState) expect(typ itemType) (item, error) {
 
 // collectComments accumulates all comments up until the next token is not a comment
 func (p *parserState) collectComments() []*ast.Comment {
+	// TODO: collect comments in _groups_ such that /n/n terminates a group.
 	var comments []*ast.Comment
 	for {
 		it := p.peek()
@@ -87,6 +88,7 @@ func (p *parserState) collectComments() []*ast.Comment {
 			Text: it.val,
 		})
 	}
+
 	return comments
 }
 
@@ -222,6 +224,85 @@ func (p *parserState) parseQualifiedIdent(context string) (*ast.QualifiedIdent, 
 	return qi, nil
 }
 
+func (p *parserState) parseEnum(leading *ast.Comment) (*ast.Enum, error) {
+	kw, err := p.expect(itemKeywordEnum)
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := p.parseIdent("enum")
+	if err != nil {
+		return nil, err
+	}
+
+	enum := &ast.Enum{
+		Pos:         itemPos(kw),
+		HeadComment: leading,
+		Name:        *name,
+	}
+
+	_, err = p.expect(itemLeftBrace)
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		element, err := p.parseIdent("enum element")
+		if err != nil {
+			return nil, err
+		}
+
+		enum.Elements = append(enum.Elements, *element)
+
+		if p.peek().typ == itemIdent {
+			continue
+		}
+		if p.peek().typ == itemComma {
+			p.next() // consume comma, continue to next element
+			// e.g ,}
+			if p.peek().typ == itemRightBrace {
+				return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "trailing comma not allowed in enum element list"}
+			}
+			continue
+		} else if p.peek().typ == itemRightBrace {
+			// don't consume yet, will be consumed by expect() below
+			break
+		} else {
+			return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected ',' or '}' in enum element list"}
+		}
+	}
+
+	_, err = p.expect(itemRightBrace)
+	if err != nil {
+		return nil, err
+	}
+
+	return enum, nil
+}
+
+func (p *parserState) parseIdent(context string) (*ast.StringLiteral, error) {
+	if p.peek().typ != itemIdent {
+		// don't allow empty grouping or undefined after comma; the trailing brace will be handled via peek later on identifier
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: fmt.Sprintf("expected identifier after %q", context)}
+	}
+	v := p.next() // consume ident
+	return &ast.StringLiteral{
+		Pos:   itemPos(v),
+		Value: v.val,
+	}, nil
+}
+
+func (p *parserState) parseStringLiteral() (*ast.StringLiteral, error) {
+	it, err := p.expect(itemString)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.StringLiteral{
+		Pos:   itemPos(it),
+		Value: it.val,
+	}, nil
+}
+
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
 // duplicate declarations, imports defined after models, etc.)
 func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
@@ -311,6 +392,21 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			if i != nil {
 				stencil.Imports = append(stencil.Imports, *i)
 			}
+
+		case itemKeywordEnum:
+			// allows only a single leading comment (for now?)
+			var leading *ast.Comment
+			if len(comments) > 0 {
+				leading = comments[len(comments)-1]
+				stencil.Comments = stencil.Comments[:len(stencil.Comments)-1]
+			}
+
+			e, err := pp.parseEnum(leading)
+			if err != nil {
+				return nil, err
+			}
+
+			stencil.Specs = append(stencil.Specs, e)
 
 		default:
 			pp.next()

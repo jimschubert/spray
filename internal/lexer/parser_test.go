@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
+	"github.com/jimschubert/spray/internal/ast"
 )
 
 func TestParseNamespace(t *testing.T) {
@@ -328,6 +329,280 @@ func TestParseImport_Multiple(t *testing.T) {
 					assert.Equal(t, expectedFQN, actualFQNs[i])
 				}
 			}
+		})
+	}
+}
+
+func TestParseEnum(t *testing.T) {
+	testCases := []struct {
+		name                     string
+		input                    string
+		expectedName             string
+		expectedElements         []string
+		headComment              string
+		expectedDocumentComments int
+		wantErr                  bool
+	}{
+		{
+			name:             "simple enum",
+			input:            "enum Status { ACTIVE, INACTIVE }\n",
+			expectedName:     "Status",
+			expectedElements: []string{"ACTIVE", "INACTIVE"},
+			wantErr:          false,
+		},
+		{
+			name:             "single element enum",
+			input:            "enum Role { USER }\n",
+			expectedName:     "Role",
+			expectedElements: []string{"USER"},
+			wantErr:          false,
+		},
+		{
+			name:             "enum with many elements",
+			input:            "enum Color { RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, BLACK, WHITE }\n",
+			expectedName:     "Color",
+			expectedElements: []string{"RED", "GREEN", "BLUE", "YELLOW", "CYAN", "MAGENTA", "BLACK", "WHITE"},
+			wantErr:          false,
+		},
+		{
+			name:             "enum with leading comment",
+			input:            "# status enumeration\nenum Status { ACTIVE, INACTIVE }\n",
+			expectedName:     "Status",
+			expectedElements: []string{"ACTIVE", "INACTIVE"},
+			headComment:      "# status enumeration",
+			wantErr:          false,
+		},
+		{
+			name:                     "enum with leading and document comments",
+			input:                    "# top level\n\n# status enumeration\nenum Status { ACTIVE, INACTIVE }\n",
+			expectedName:             "Status",
+			expectedElements:         []string{"ACTIVE", "INACTIVE"},
+			headComment:              "# status enumeration",
+			expectedDocumentComments: 1,
+			wantErr:                  false,
+		},
+		{
+			name:             "enum with multiline definition",
+			input:            "enum Status {\n  ACTIVE,\n  INACTIVE\n}\n",
+			expectedName:     "Status",
+			expectedElements: []string{"ACTIVE", "INACTIVE"},
+			wantErr:          false,
+		},
+		{
+			name:    "enum with trailing comma not allowed",
+			input:   "enum Status { ACTIVE, INACTIVE, }\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on empty enum",
+			input:   "enum Status { }\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing name",
+			input:   "enum { ACTIVE, INACTIVE }\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing opening brace",
+			input:   "enum Status ACTIVE, INACTIVE\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing closing brace",
+			input:   "enum Status { ACTIVE, INACTIVE\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			assert.Equal(t, 1, len(stencil.Specs), "expected 1 spec")
+
+			enum, ok := stencil.Specs[0].(*ast.Enum)
+			assert.True(t, ok, "expected spec to be an Enum")
+
+			assert.Equal(t, tc.expectedName, enum.Name.Value)
+			assert.Equal(t, len(tc.expectedElements), len(enum.Elements))
+
+			for i, expectedElement := range tc.expectedElements {
+				assert.Equal(t, expectedElement, enum.Elements[i].Value)
+			}
+
+			if tc.headComment != "" && enum.HeadComment != nil {
+				assert.Equal(t, tc.headComment, enum.HeadComment.Text)
+			}
+
+			assert.Equal(t, tc.expectedDocumentComments, len(stencil.Comments))
+		})
+	}
+}
+
+func TestParseEnum_MultipleEnums(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected []struct {
+			name     string
+			elements []string
+		}
+		wantErr bool
+	}{
+		{
+			name:  "multiple enums",
+			input: "enum Status { ACTIVE, INACTIVE }\nenum Role { USER, ADMIN }\n",
+			expected: []struct {
+				name     string
+				elements []string
+			}{
+				{
+					name:     "Status",
+					elements: []string{"ACTIVE", "INACTIVE"},
+				},
+				{
+					name:     "Role",
+					elements: []string{"USER", "ADMIN"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:  "multiple enums with comments",
+			input: "# status\nenum Status { ACTIVE, INACTIVE }\n\n# role\nenum Role { USER, ADMIN }\n",
+			expected: []struct {
+				name     string
+				elements []string
+			}{
+				{
+					name:     "Status",
+					elements: []string{"ACTIVE", "INACTIVE"},
+				},
+				{
+					name:     "Role",
+					elements: []string{"USER", "ADMIN"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:  "three enums",
+			input: "enum Status { ACTIVE, INACTIVE }\nenum Role { USER, ADMIN, GUEST }\nenum Color { RED, BLUE }\n",
+			expected: []struct {
+				name     string
+				elements []string
+			}{
+				{
+					name:     "Status",
+					elements: []string{"ACTIVE", "INACTIVE"},
+				},
+				{
+					name:     "Role",
+					elements: []string{"USER", "ADMIN", "GUEST"},
+				},
+				{
+					name:     "Color",
+					elements: []string{"RED", "BLUE"},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			assert.Equal(t, len(tc.expected), len(stencil.Specs))
+
+			for idx, expected := range tc.expected {
+				enum, ok := stencil.Specs[idx].(*ast.Enum)
+				assert.True(t, ok, "expected spec at index %d to be an Enum", idx)
+
+				assert.Equal(t, expected.name, enum.Name.Value)
+				assert.Equal(t, len(expected.elements), len(enum.Elements))
+
+				for i, elem := range expected.elements {
+					assert.Equal(t, elem, enum.Elements[i].Value)
+				}
+			}
+		})
+	}
+}
+
+func TestParseEnum_WithImportsAndNamespace(t *testing.T) {
+	testCases := []struct {
+		name              string
+		input             string
+		expectedNamespace string
+		expectedImports   int
+		expectedEnums     int
+		wantErr           bool
+	}{
+		{
+			name:              "namespace, import, and enum",
+			input:             "namespace acme\nimport acme.common { Page }\nenum Status {\nACTIVE\nINACTIVE\n}\n",
+			expectedNamespace: "acme",
+			expectedImports:   1,
+			expectedEnums:     1,
+			wantErr:           false,
+		},
+		{
+			name: "multiple imports and enums",
+			// note: one enum has no commas (defined in spec), one has commas - should be able to parse both
+			input:             "import acme.common { Page }\nimport acme.users { User }\nenum Status {\nACTIVE\nINACTIVE\n}\nenum Role { ADMIN, USER }\n",
+			expectedNamespace: "default",
+			expectedImports:   2,
+			expectedEnums:     2,
+			wantErr:           false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			assert.Equal(t, tc.expectedNamespace, stencil.Namespace.FullName())
+			assert.Equal(t, tc.expectedImports, len(stencil.Imports))
+
+			enumCount := 0
+			for _, spec := range stencil.Specs {
+				if _, ok := spec.(*ast.Enum); ok {
+					enumCount++
+				}
+			}
+			assert.Equal(t, tc.expectedEnums, enumCount)
 		})
 	}
 }
