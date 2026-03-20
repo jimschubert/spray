@@ -47,7 +47,7 @@ func (p *parserState) next() item {
 	}
 }
 
-// peek (skips newlines0
+// peek (skips newlines)
 func (p *parserState) peek() item {
 	if p.peeked != nil {
 		return *p.peeked
@@ -59,6 +59,29 @@ func (p *parserState) peek() item {
 			return it
 		}
 	}
+}
+
+// peekRaw returns the next token without skipping newlines
+func (p *parserState) peekRaw() item {
+	if p.peeked != nil {
+		return *p.peeked
+	}
+	it := p.l.nextItem()
+	p.peeked = &it
+	return it
+}
+
+// nextRaw returns the next token without skipping newlines
+func (p *parserState) nextRaw() item {
+	if p.peeked != nil {
+		it := *p.peeked
+		p.peeked = nil
+		p.current = it
+		return it
+	}
+	it := p.l.nextItem()
+	p.current = it
+	return it
 }
 
 // expect consumes the next token and returns an error if unexpected
@@ -73,20 +96,36 @@ func (p *parserState) expect(typ itemType) (item, error) {
 	return it, nil
 }
 
-// collectComments accumulates all comments up until the next token is not a comment
+// collectComments accumulates all comments up until the next token is not a comment.
+// Comments are grouped such that \n\n terminates a group.
 func (p *parserState) collectComments() []*ast.Comment {
-	// TODO: collect comments in _groups_ such that /n/n terminates a group.
 	var comments []*ast.Comment
+	newlineCount := 0
+
 	for {
-		it := p.peek()
+		it := p.peekRaw()
+
+		if it.typ == itemNewline {
+			newlineCount++
+			if newlineCount >= 2 {
+				// \n\n ends _this_ group of comments, allowing parser to associate CommentGroup with certain defs.
+				break
+			}
+			p.nextRaw() // consume \n
+			continue
+		}
+
 		if it.typ != itemComment {
 			break
 		}
-		p.next() // consume it
+
+		p.nextRaw() // consume comment
 		comments = append(comments, &ast.Comment{
 			Pos:  ast.Position{Line: it.line, Col: int(it.pos)},
 			Text: it.val,
 		})
+
+		newlineCount = 0
 	}
 
 	return comments
@@ -224,7 +263,7 @@ func (p *parserState) parseQualifiedIdent(context string) (*ast.QualifiedIdent, 
 	return qi, nil
 }
 
-func (p *parserState) parseEnum(leading *ast.Comment) (*ast.Enum, error) {
+func (p *parserState) parseEnum(group *ast.CommentGroup) (*ast.Enum, error) {
 	kw, err := p.expect(itemKeywordEnum)
 	if err != nil {
 		return nil, err
@@ -237,7 +276,7 @@ func (p *parserState) parseEnum(leading *ast.Comment) (*ast.Enum, error) {
 
 	enum := &ast.Enum{
 		Pos:         itemPos(kw),
-		HeadComment: leading,
+		HeadComment: group,
 		Name:        *name,
 	}
 
@@ -324,8 +363,20 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 	for {
 		// store comments here so any leading comments can be attached to nodes supporting it
 		comments := pp.collectComments()
+
 		// store all comments at the document level as well
 		stencil.Comments = append(stencil.Comments, comments...)
+
+		// collectComments will leave the last \n from the \n\n group termination
+		for pp.peekRaw().typ == itemNewline {
+			// consume that last \n
+			pp.nextRaw()
+		}
+
+		// new comment or comment group?
+		if pp.peekRaw().typ == itemComment {
+			continue
+		}
 
 		it := pp.peek()
 
@@ -394,14 +445,14 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			}
 
 		case itemKeywordEnum:
-			// allows only a single leading comment (for now?)
-			var leading *ast.Comment
+			var group *ast.CommentGroup
 			if len(comments) > 0 {
-				leading = comments[len(comments)-1]
-				stencil.Comments = stencil.Comments[:len(stencil.Comments)-1]
+				group = &ast.CommentGroup{Comments: comments}
+				// trim from file comments
+				stencil.Comments = stencil.Comments[:len(stencil.Comments)-len(comments)]
 			}
 
-			e, err := pp.parseEnum(leading)
+			e, err := pp.parseEnum(group)
 			if err != nil {
 				return nil, err
 			}

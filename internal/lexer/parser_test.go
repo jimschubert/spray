@@ -413,6 +413,16 @@ func TestParseEnum(t *testing.T) {
 			input:   "enum Status { ACTIVE, INACTIVE\n",
 			wantErr: true,
 		},
+		{
+			name:                     "enum with comment group",
+			input:                    "# doc comment\n\n# enum comment 1\n# enum comment 2\nenum Status {\nACTIVE, INACTIVE\n}\n",
+			headComment:              "# enum comment 1\n# enum comment 2",
+			expectedName:             "Status",
+			expectedElements:         []string{"ACTIVE", "INACTIVE"},
+			expectedDocumentComments: 1,
+			wantErr:                  false,
+			// note: the doc comment should be associated with the enum, not the namespace, since it's closer to the enum
+		},
 	}
 
 	for _, tc := range testCases {
@@ -442,7 +452,7 @@ func TestParseEnum(t *testing.T) {
 			}
 
 			if tc.headComment != "" && enum.HeadComment != nil {
-				assert.Equal(t, tc.headComment, enum.HeadComment.Text)
+				assert.Equal(t, tc.headComment, enum.HeadComment.String())
 			}
 
 			assert.Equal(t, tc.expectedDocumentComments, len(stencil.Comments))

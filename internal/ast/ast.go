@@ -85,10 +85,12 @@ func (cg *CommentGroup) String() string {
 	}
 
 	sb := strings.Builder{}
-	for _, comment := range cg.Comments {
+	for idx, comment := range cg.Comments {
 		if comment != nil {
 			sb.WriteString(comment.String())
-			sb.WriteString("\n")
+			if idx < len(cg.Comments)-1 {
+				sb.WriteString("\n")
+			}
 		}
 	}
 	return sb.String()
@@ -150,7 +152,7 @@ type Enum struct {
 	Pos         Position
 	Name        StringLiteral
 	Elements    []StringLiteral
-	HeadComment *Comment
+	HeadComment *CommentGroup
 }
 
 func (e *Enum) Position() Position {
