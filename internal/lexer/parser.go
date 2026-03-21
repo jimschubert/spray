@@ -367,8 +367,29 @@ func (p *parserState) parseTypeAlias(group *ast.CommentGroup) (*ast.TypeAlias, e
 		return nil, err
 	}
 
+	expr, err := p.parseTypeExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	typeAlias.Type = *expr
+
+	return typeAlias, err
+}
+
+func (p *parserState) parseTypeExpression() (*ast.TypeExpression, error) {
+	var err error
 	var aliased *ast.QualifiedIdent
-	if it, ok := p.peekAny(itemKeywordString, itemKeywordInt, itemKeywordFloat, itemKeywordBoolean, itemKeywordUUID, itemKeywordTimestamp, itemKeywordDate, itemKeywordAny); ok {
+	if it, ok := p.peekAny(
+		itemKeywordString,
+		itemKeywordInt,
+		itemKeywordFloat,
+		itemKeywordBoolean,
+		itemKeywordUUID,
+		itemKeywordTimestamp,
+		itemKeywordDate,
+		itemKeywordAny,
+	); ok {
 		p.next() // consume scalar type
 		aliased = &ast.QualifiedIdent{
 			Pos:   itemPos(it),
@@ -381,8 +402,10 @@ func (p *parserState) parseTypeAlias(group *ast.CommentGroup) (*ast.TypeAlias, e
 		}
 	}
 
+	var args []ast.TypeExpression
 	var isOptional bool
 	var isArray bool
+
 	if p.peek().typ == itemQuestion {
 		isOptional = true
 		p.next() // consume '?'
@@ -392,17 +415,38 @@ func (p *parserState) parseTypeAlias(group *ast.CommentGroup) (*ast.TypeAlias, e
 		if _, err = p.expect(itemRightBracket); err != nil {
 			return nil, err
 		}
+	} else if p.peek().typ == itemLeftAngle {
+		p.next() // consume '<'
+		for {
+			arg, err := p.parseTypeExpression()
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, *arg)
+
+			if p.peek().typ == itemComma {
+				p.next() // consume comma, continue to next arg
+				continue
+			} else if p.peek().typ == itemRightAngle {
+				p.next() // consume '>'
+				if len(args) == 0 {
+					return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "generic type argument list cannot be empty"}
+				}
+				break
+			} else {
+				return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected ',' or '>' in generic type argument list"}
+			}
+		}
 	}
 
 	// TODO: genericArgs, etc
-	typeAlias.Type = ast.TypeExpression{
-		Pos:        aliased.Position(),
-		Base:       *aliased,
-		IsOptional: isOptional,
-		IsArray:    isArray,
-	}
-
-	return typeAlias, nil
+	return &ast.TypeExpression{
+		Pos:         aliased.Position(),
+		Base:        *aliased,
+		GenericArgs: args,
+		IsOptional:  isOptional,
+		IsArray:     isArray,
+	}, nil
 }
 
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.

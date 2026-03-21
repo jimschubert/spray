@@ -619,39 +619,72 @@ func TestParseEnum_WithImportsAndNamespace(t *testing.T) {
 
 func TestParseTypeAlias(t *testing.T) {
 	testCases := []struct {
-		name         string
-		input        string
-		expectedName string
-		expectedType string
-		wantErr      bool
+		name                        string
+		input                       string
+		expectedName                string
+		expectedTypeBase            string
+		expectedTypeWithConstraints string
+		wantErr                     bool
 	}{
 		{
-			name:         "type alias with scalar type",
-			input:        "type Email = string\n",
-			expectedName: "Email",
-			expectedType: "string",
-			wantErr:      false,
+			name:             "type alias with scalar type",
+			input:            "type Email = string\n",
+			expectedName:     "Email",
+			expectedTypeBase: "string",
+			wantErr:          false,
 		},
 		{
-			name:         "type alias with non-scalar type",
-			input:        "type UserID = ValueTypeID\n",
-			expectedName: "UserID",
-			expectedType: "ValueTypeID",
-			wantErr:      false,
+			name:                        "type alias with scalar type optional",
+			input:                       "type Email = string?\n",
+			expectedName:                "Email",
+			expectedTypeBase:            "string",
+			expectedTypeWithConstraints: "string?",
+			wantErr:                     false,
 		},
 		{
-			name:         "type alias with fully qualified non-scalar type",
-			input:        "type UserID = acme.common.v1.UUID\n",
-			expectedName: "UserID",
-			expectedType: "acme.common.v1.UUID",
-			wantErr:      false,
+			name:                        "type alias with scalar type array",
+			input:                       "type Email = string[]\n",
+			expectedName:                "Email",
+			expectedTypeBase:            "string",
+			expectedTypeWithConstraints: "string[]",
+			wantErr:                     false,
 		},
 		{
-			name:         "type alias with fully qualified type",
-			input:        "type UserID = acme.common.v1.UUID\n",
-			expectedName: "UserID",
-			expectedType: "acme.common.v1.UUID",
-			wantErr:      false,
+			name:             "type alias with non-scalar type",
+			input:            "type UserID = ValueTypeID\n",
+			expectedName:     "UserID",
+			expectedTypeBase: "ValueTypeID",
+			wantErr:          false,
+		},
+		{
+			name:             "type alias with fully qualified non-scalar type",
+			input:            "type UserID = acme.common.v1.UUID\n",
+			expectedName:     "UserID",
+			expectedTypeBase: "acme.common.v1.UUID",
+			wantErr:          false,
+		},
+		{
+			name:                        "type alias with generic type",
+			input:                       "type MyType = YourType<string, int>\n",
+			expectedName:                "MyType",
+			expectedTypeBase:            "YourType",
+			expectedTypeWithConstraints: "YourType<string, int>",
+			wantErr:                     false,
+		},
+		{
+			name:                        "type alias with generic type nested with constraints",
+			input:                       "type MyType = YourType<Map<int, string?>>\n",
+			expectedName:                "MyType",
+			expectedTypeBase:            "YourType",
+			expectedTypeWithConstraints: "YourType<Map<int, string?>>",
+			wantErr:                     false,
+		},
+		{
+			name:             "type alias with fully qualified type",
+			input:            "type UserID = acme.common.v1.UUID\n",
+			expectedName:     "UserID",
+			expectedTypeBase: "acme.common.v1.UUID",
+			wantErr:          false,
 		},
 		{
 			name:    "error on missing equals",
@@ -685,7 +718,12 @@ func TestParseTypeAlias(t *testing.T) {
 			assert.True(t, ok, "expected spec to be a TypeAlias")
 
 			assert.Equal(t, tc.expectedName, typeAlias.Name.Value)
-			assert.Equal(t, tc.expectedType, typeAlias.Type.Base.String())
+			if tc.expectedTypeBase != "" {
+				assert.Equal(t, tc.expectedTypeBase, typeAlias.Type.Base.String())
+			}
+			if tc.expectedTypeWithConstraints != "" {
+				assert.Equal(t, tc.expectedTypeWithConstraints, typeAlias.Type.String())
+			}
 		})
 	}
 }
