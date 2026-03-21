@@ -458,9 +458,10 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 		Pos: itemPos(kw),
 	}
 
-	if it, ok := p.peekAny(itemKeywordDefault, itemKeywordPrimary, itemKeywordUnique); ok {
-		p.next() // consume keyword decorator
-		decorator.Name = it.String()
+	it := p.peek()
+	if it.typ == itemIdent {
+		p.next() // consume identifier
+		decorator.Name = it.val
 	} else {
 		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected decorator name after '@'"}
 	}
@@ -468,24 +469,46 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 	if p.peek().typ == itemLeftParen {
 		p.next() // consume '('
 
+		// special values (not treated as identifiers)
 		if special, ok := p.peekAny(itemKeywordNow, itemString, itemInt, itemFloat); ok {
-			p.next() // consume 'now' keyword
+			p.next() // consume keyword or literal
 			decorator.Args.Set(special.val, nil, itemPos(special))
 		} else {
-			// TODO: revisit this peek to se if we need to support itemInt, itemFloat or others
-			key, ok := p.peekAny(itemIdent, itemString)
-			if !ok {
-				return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier or string literal as decorator argument"}
-			}
+			if p.peek().typ == itemIdent {
+				keyOrValue := p.next() // consume identifier
 
-			// type expression _might_ be overkill here as it allows generics. maybe a future item could to separate
-			// scalar parsing or do semantic validation to guard against user defining generics
-			arg, err := p.parseTypeExpression()
-			if err != nil {
-				return nil, err
-			}
+				// if `key: value` syntax
+				if p.peek().typ == itemColon {
+					p.next() // consume ':'
 
-			decorator.Args.Set(key.val, arg, arg.Position())
+					if valueIdent, ok := p.peekAny(itemIdent); ok {
+						p.next() // consume identifier
+
+						typeExpr := &ast.TypeExpression{
+							Pos: itemPos(valueIdent),
+							Base: ast.QualifiedIdent{
+								Pos:   itemPos(valueIdent),
+								Parts: []string{valueIdent.val},
+							},
+						}
+						decorator.Args.Set(keyOrValue.val, typeExpr, itemPos(keyOrValue))
+					} else {
+						return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier after ':' in decorator argument"}
+					}
+				} else {
+					// simple expression like @default(something)
+					typeExpr := &ast.TypeExpression{
+						Pos: itemPos(keyOrValue),
+						Base: ast.QualifiedIdent{
+							Pos:   itemPos(keyOrValue),
+							Parts: []string{keyOrValue.val},
+						},
+					}
+					decorator.Args.Set(keyOrValue.val, typeExpr, itemPos(keyOrValue))
+				}
+			} else {
+				return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier, string literal, or special value as decorator argument"}
+			}
 		}
 
 		if _, err = p.expect(itemRightParen); err != nil {
@@ -585,6 +608,44 @@ func (p *parserState) parseInput(group *ast.CommentGroup) (*ast.Input, error) {
 	}
 
 	return input, nil
+}
+
+func (p *parserState) parseModel(group *ast.CommentGroup) (*ast.Model, error) {
+	kw, err := p.expect(itemKeywordModel)
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := p.parseIdent("model")
+	if err != nil {
+		return nil, err
+	}
+
+	model := &ast.Model{
+		Pos:         itemPos(kw),
+		HeadComment: group,
+		Name:        *name,
+	}
+
+	_, err = p.expect(itemLeftBrace)
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		next := p.peek()
+		if next.typ == itemRightBrace {
+			p.next() // consume right brace
+			break
+		}
+		field, err := p.parseField()
+		if err != nil {
+			return nil, err
+		}
+		model.Fields = append(model.Fields, *field)
+	}
+
+	return model, nil
 }
 
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
@@ -716,6 +777,21 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			}
 
 			stencil.Specs = append(stencil.Specs, a)
+
+		case itemKeywordModel:
+			var group *ast.CommentGroup
+			if len(comments) > 0 {
+				group = &ast.CommentGroup{Comments: comments}
+				// trim from file comments
+				stencil.Comments = stencil.Comments[:len(stencil.Comments)-len(comments)]
+			}
+
+			model, err := pp.parseModel(group)
+			if err != nil {
+				return nil, err
+			}
+
+			stencil.Specs = append(stencil.Specs, model)
 
 		case itemKeywordInput:
 			var group *ast.CommentGroup

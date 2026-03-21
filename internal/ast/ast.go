@@ -321,6 +321,17 @@ func (f *Field) Position() Position {
 	return f.Pos
 }
 
+type Model struct {
+	Pos         Position
+	Name        StringLiteral
+	Fields      []Field
+	HeadComment *CommentGroup
+}
+
+func (m *Model) Position() Position {
+	return m.Pos
+}
+
 type Input struct {
 	Pos         Position
 	Name        StringLiteral
@@ -334,6 +345,7 @@ func (i *Input) Position() Position {
 
 func (e *Enum) specNode()      {}
 func (a *TypeAlias) specNode() {}
+func (m *Model) specNode()     {}
 func (i *Input) specNode()     {}
 
 func (s *StringLiteral) typeNode()  {}

@@ -25,7 +25,7 @@ import (
 )
 
 // keywordsByFirstChar buckets keywords by their first character for efficient lookup.
-// This reduces average keyword matching from O(47) to O(keywords_per_bucket).
+// This reduces average keyword matching from O(keyword_count) to O(keywords_per_bucket).
 var keywordsByFirstChar = func() map[byte][]string {
 	m := make(map[byte][]string)
 	for keyword := range keywords {

@@ -851,3 +851,195 @@ func TestParseInput(t *testing.T) {
 		})
 	}
 }
+
+func TestParseModel(t *testing.T) {
+	testCases := []struct {
+		name               string
+		input              string
+		expectedFieldCount int
+		expectedFieldName  string
+		expectedFieldType  string
+		expectedDecorators int
+		wantErr            bool
+	}{
+		{
+			name:               "model with scalar fields",
+			input:              "namespace test\nmodel User {\n  id: uuid\n  email: string\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "model with non-scalar fields",
+			input:              "namespace test\nmodel User {\n  id: uuid\n  role: UserRole\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "model with array field",
+			input:              "namespace test\nmodel User {\n  id: uuid\n  posts: Post[]\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "model with optional field",
+			input:              "namespace test\nmodel User {\n  id: uuid\n  name: string?\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "model with fully qualified field",
+			input:              "namespace test\nmodel User {\n  id: uuid\n  role: acme.common.v1.Role\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "model with @primary decorator",
+			input:              "namespace test\nmodel User {\n  id: uuid @primary\n  email: string\n}\n",
+			expectedFieldName:  "id",
+			expectedFieldType:  "uuid",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "model with @unique decorator",
+			input:              "namespace test\nmodel User {\n  email: string @unique\n}\n",
+			expectedFieldName:  "email",
+			expectedFieldType:  "string",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "model with @default decorator",
+			input:              "namespace test\nmodel User {\n  role: UserRole @default(member)\n}\n",
+			expectedFieldName:  "role",
+			expectedFieldType:  "UserRole",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "model with @default(now)",
+			input:              "namespace test\nmodel User {\n  createdAt: timestamp @default(now)\n}\n",
+			expectedFieldName:  "createdAt",
+			expectedFieldType:  "timestamp",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "model with @updatedAt decorator",
+			input:              "namespace test\nmodel User {\n  updatedAt: timestamp @updatedAt\n}\n",
+			expectedFieldName:  "updatedAt",
+			expectedFieldType:  "timestamp",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "model with @relation decorator",
+			input:              "namespace test\nmodel Post {\n  authorId: uuid\n  author: User @relation(field: authorId)\n}\n",
+			expectedFieldName:  "author",
+			expectedFieldType:  "User",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "model with @deprecated decorator",
+			input:              "namespace test\nmodel User {\n  oldField: string @deprecated(msg)\n}\n",
+			expectedFieldName:  "oldField",
+			expectedFieldType:  "string",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "model with multiple decorators on one field",
+			input:              "namespace test\nmodel User {\n  id: uuid @primary @unique\n}\n",
+			expectedFieldName:  "id",
+			expectedFieldType:  "uuid",
+			expectedDecorators: 2,
+			wantErr:            false,
+		},
+		{
+			name: "model with full example from spec",
+			input: `namespace test
+model User {
+  id: uuid @primary
+  email: Email @unique
+  role: UserRole @default(member)
+  name: string?
+  createdAt: timestamp @default(now)
+  updatedAt: timestamp @updatedAt
+  posts: Post[] @relation
+}
+`,
+			expectedFieldCount: 7,
+			wantErr:            false,
+		},
+		{
+			name:               "model with no fields",
+			input:              "namespace test\nmodel Empty {\n}\n",
+			expectedFieldCount: 0,
+			wantErr:            false,
+		},
+		{
+			name:    "error on missing field type",
+			input:   "namespace test\nmodel User {\n  id\n}\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing field name",
+			input:   "namespace test\nmodel User {\n  : uuid\n}\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing opening brace",
+			input:   "namespace test\nmodel User id: uuid }\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing closing brace",
+			input:   "namespace test\nmodel User {\n  id: uuid\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			// Find the Model spec
+			var modelSpec *ast.Model
+			for _, spec := range stencil.Specs {
+				if m, ok := spec.(*ast.Model); ok {
+					modelSpec = m
+					break
+				}
+			}
+			assert.True(t, modelSpec != nil, "expected to find a Model spec")
+
+			if tc.expectedFieldCount > 0 {
+				assert.Equal(t, tc.expectedFieldCount, len(modelSpec.Fields))
+			}
+
+			if tc.expectedFieldName != "" {
+				found := false
+				for _, field := range modelSpec.Fields {
+					if field.Name.Value == tc.expectedFieldName {
+						found = true
+						assert.Equal(t, tc.expectedFieldType, field.Type.String())
+						assert.Equal(t, tc.expectedDecorators, len(field.Decorators))
+						break
+					}
+				}
+				assert.True(t, found, "expected field %q not found", tc.expectedFieldName)
+			}
+		})
+	}
+}

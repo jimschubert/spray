@@ -91,13 +91,14 @@ const (
 	itemKeywordErrors
 	itemKeywordSummary
 	itemKeywordTag
-	itemKeywordDeprecated
-	itemKeywordRaw
-	itemKeywordDefault
-	itemKeywordPrimary
-	itemKeywordUnique
-	itemKeywordUpdatedAt
-	itemKeywordRelation
+	// input/model "special" decorators are emitted as identifiers
+	// itemKeywordDeprecated
+	// itemKeywordRaw
+	// itemKeywordDefault
+	// itemKeywordPrimary
+	// itemKeywordUnique
+	// itemKeywordUpdatedAt
+	// itemKeywordRelation
 
 	// API styles
 	itemKeywordREST
@@ -155,58 +156,58 @@ const (
 )
 
 const (
-	keywordNamespace  = "namespace"
-	keywordImport     = "import"
-	keywordType       = "type"
-	keywordEnum       = "enum"
-	keywordModel      = "model"
-	keywordInput      = "input"
-	keywordAPI        = "api"
-	keywordRPC        = "rpc"
-	keywordStream     = "stream"
-	keywordPublish    = "publish"
-	keywordSubscribe  = "subscribe"
-	keywordGET        = "GET"
-	keywordPOST       = "POST"
-	keywordPUT        = "PUT"
-	keywordPATCH      = "PATCH"
-	keywordDELETE     = "DELETE"
-	keywordHEAD       = "HEAD"
-	keywordOPTIONS    = "OPTIONS"
-	keywordVersion    = "version"
-	keywordStyle      = "style"
-	keywordBasePath   = "basePath"
-	keywordAuth       = "auth"
-	keywordBody       = "body"
-	keywordQuery      = "query"
-	keywordErrors     = "errors"
-	keywordSummary    = "summary"
-	keywordTag        = "tag"
-	keywordDeprecated = "deprecated"
-	keywordRaw        = "raw"
-	keywordDefault    = "default"
-	keywordPrimary    = "primary"
-	keywordUnique     = "unique"
-	keywordUpdatedAt  = "updatedAt"
-	keywordRelation   = "relation"
-	keywordREST       = "rest"
-	keywordEvents     = "events"
-	keywordBearer     = "bearer"
-	keywordAPIKey     = "apiKey"
-	keywordBasic      = "basic"
-	keywordNone       = "none"
-	keywordTrue       = "true"
-	keywordFalse      = "false"
-	keywordNull       = "null"
-	keywordNow        = "now"
-	keywordUUID       = "uuid"
-	keywordString     = "string"
-	keywordInt        = "int"
-	keywordFloat      = "float"
-	keywordBoolean    = "boolean"
-	keywordTimestamp  = "timestamp"
-	keywordDate       = "date"
-	keywordAny        = "any"
+	keywordNamespace = "namespace"
+	keywordImport    = "import"
+	keywordType      = "type"
+	keywordEnum      = "enum"
+	keywordModel     = "model"
+	keywordInput     = "input"
+	keywordAPI       = "api"
+	keywordRPC       = "rpc"
+	keywordStream    = "stream"
+	keywordPublish   = "publish"
+	keywordSubscribe = "subscribe"
+	keywordGET       = "GET"
+	keywordPOST      = "POST"
+	keywordPUT       = "PUT"
+	keywordPATCH     = "PATCH"
+	keywordDELETE    = "DELETE"
+	keywordHEAD      = "HEAD"
+	keywordOPTIONS   = "OPTIONS"
+	keywordVersion   = "version"
+	keywordStyle     = "style"
+	keywordBasePath  = "basePath"
+	keywordAuth      = "auth"
+	keywordBody      = "body"
+	keywordQuery     = "query"
+	keywordErrors    = "errors"
+	keywordSummary   = "summary"
+	keywordTag       = "tag"
+	// keywordDeprecated = "deprecated"
+	// keywordRaw        = "raw"
+	// keywordDefault    = "default"
+	// keywordPrimary    = "primary"
+	// keywordUnique     = "unique"
+	// keywordUpdatedAt  = "updatedAt"
+	// keywordRelation   = "relation"
+	keywordREST      = "rest"
+	keywordEvents    = "events"
+	keywordBearer    = "bearer"
+	keywordAPIKey    = "apiKey"
+	keywordBasic     = "basic"
+	keywordNone      = "none"
+	keywordTrue      = "true"
+	keywordFalse     = "false"
+	keywordNull      = "null"
+	keywordNow       = "now"
+	keywordUUID      = "uuid"
+	keywordString    = "string"
+	keywordInt       = "int"
+	keywordFloat     = "float"
+	keywordBoolean   = "boolean"
+	keywordTimestamp = "timestamp"
+	keywordDate      = "date"
+	keywordAny       = "any"
 
 	newline        = '\n'
 	carriageReturn = '\r'
@@ -240,58 +241,61 @@ const (
 )
 
 var keywords = map[string]itemType{
-	keywordNamespace:  itemKeywordNamespace,
-	keywordImport:     itemKeywordImport,
-	keywordType:       itemKeywordType,
-	keywordEnum:       itemKeywordEnum,
-	keywordModel:      itemKeywordModel,
-	keywordInput:      itemKeywordInput,
-	keywordAPI:        itemKeywordAPI,
-	keywordRPC:        itemKeywordRPC,
-	keywordStream:     itemKeywordStream,
-	keywordPublish:    itemKeywordPublish,
-	keywordSubscribe:  itemKeywordSubscribe,
-	keywordGET:        itemKeywordGET,
-	keywordPOST:       itemKeywordPOST,
-	keywordPUT:        itemKeywordPUT,
-	keywordPATCH:      itemKeywordPATCH,
-	keywordDELETE:     itemKeywordDELETE,
-	keywordHEAD:       itemKeywordHEAD,
-	keywordOPTIONS:    itemKeywordOPTIONS,
-	keywordVersion:    itemKeywordVersion,
-	keywordStyle:      itemKeywordStyle,
-	keywordBasePath:   itemKeywordBasePath,
-	keywordAuth:       itemKeywordAuth,
-	keywordBody:       itemKeywordBody,
-	keywordQuery:      itemKeywordQuery,
-	keywordErrors:     itemKeywordErrors,
-	keywordSummary:    itemKeywordSummary,
-	keywordTag:        itemKeywordTag,
-	keywordDeprecated: itemKeywordDeprecated,
-	keywordRaw:        itemKeywordRaw,
-	keywordDefault:    itemKeywordDefault,
-	keywordPrimary:    itemKeywordPrimary,
-	keywordUnique:     itemKeywordUnique,
-	keywordUpdatedAt:  itemKeywordUpdatedAt,
-	keywordRelation:   itemKeywordRelation,
-	keywordREST:       itemKeywordREST,
-	keywordEvents:     itemKeywordEvents,
-	keywordBearer:     itemKeywordBearer,
-	keywordAPIKey:     itemKeywordAPIKey,
-	keywordBasic:      itemKeywordBasic,
-	keywordNone:       itemKeywordNone,
-	keywordTrue:       itemKeywordTrue,
-	keywordFalse:      itemKeywordFalse,
-	keywordNull:       itemKeywordNull,
-	keywordNow:        itemKeywordNow,
-	keywordUUID:       itemKeywordUUID,
-	keywordString:     itemKeywordString,
-	keywordInt:        itemKeywordInt,
-	keywordFloat:      itemKeywordFloat,
-	keywordBoolean:    itemKeywordBoolean,
-	keywordTimestamp:  itemKeywordTimestamp,
-	keywordDate:       itemKeywordDate,
-	keywordAny:        itemKeywordAny,
+	keywordNamespace: itemKeywordNamespace,
+	keywordImport:    itemKeywordImport,
+	keywordType:      itemKeywordType,
+	keywordEnum:      itemKeywordEnum,
+	keywordModel:     itemKeywordModel,
+	keywordInput:     itemKeywordInput,
+	keywordAPI:       itemKeywordAPI,
+	keywordRPC:       itemKeywordRPC,
+	keywordStream:    itemKeywordStream,
+	keywordPublish:   itemKeywordPublish,
+	keywordSubscribe: itemKeywordSubscribe,
+	keywordGET:       itemKeywordGET,
+	keywordPOST:      itemKeywordPOST,
+	keywordPUT:       itemKeywordPUT,
+	keywordPATCH:     itemKeywordPATCH,
+	keywordDELETE:    itemKeywordDELETE,
+	keywordHEAD:      itemKeywordHEAD,
+	keywordOPTIONS:   itemKeywordOPTIONS,
+	keywordVersion:   itemKeywordVersion,
+	keywordStyle:     itemKeywordStyle,
+	keywordBasePath:  itemKeywordBasePath,
+	keywordAuth:      itemKeywordAuth,
+	keywordBody:      itemKeywordBody,
+	keywordQuery:     itemKeywordQuery,
+	keywordErrors:    itemKeywordErrors,
+	keywordSummary:   itemKeywordSummary,
+	keywordTag:       itemKeywordTag,
+	// Decorator-only keywords are NOT included here - they're only recognized after @
+	// keywordDeprecated, keywordRaw, keywordDefault, keywordPrimary, keywordUnique,
+	// keywordUpdatedAt, keywordRelation - these are handled in parseDecorator()
+	// keywordDeprecated: itemKeywordDeprecated,
+	// keywordRaw:        itemKeywordRaw,
+	// keywordDefault:    itemKeywordDefault,
+	// keywordPrimary:    itemKeywordPrimary,
+	// keywordUnique:     itemKeywordUnique,
+	// keywordUpdatedAt:  itemKeywordUpdatedAt,
+	// keywordRelation:   itemKeywordRelation,
+	keywordREST:      itemKeywordREST,
+	keywordEvents:    itemKeywordEvents,
+	keywordBearer:    itemKeywordBearer,
+	keywordAPIKey:    itemKeywordAPIKey,
+	keywordBasic:     itemKeywordBasic,
+	keywordNone:      itemKeywordNone,
+	keywordTrue:      itemKeywordTrue,
+	keywordFalse:     itemKeywordFalse,
+	keywordNull:      itemKeywordNull,
+	keywordNow:       itemKeywordNow,
+	keywordUUID:      itemKeywordUUID,
+	keywordString:    itemKeywordString,
+	keywordInt:       itemKeywordInt,
+	keywordFloat:     itemKeywordFloat,
+	keywordBoolean:   itemKeywordBoolean,
+	keywordTimestamp: itemKeywordTimestamp,
+	keywordDate:      itemKeywordDate,
+	keywordAny:       itemKeywordAny,
 }
 
 var symbolsDescriptions = func() map[itemType]string {
