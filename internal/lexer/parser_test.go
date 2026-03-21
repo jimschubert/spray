@@ -616,3 +616,76 @@ func TestParseEnum_WithImportsAndNamespace(t *testing.T) {
 		})
 	}
 }
+
+func TestParseTypeAlias(t *testing.T) {
+	testCases := []struct {
+		name         string
+		input        string
+		expectedName string
+		expectedType string
+		wantErr      bool
+	}{
+		{
+			name:         "type alias with scalar type",
+			input:        "type Email = string\n",
+			expectedName: "Email",
+			expectedType: "string",
+			wantErr:      false,
+		},
+		{
+			name:         "type alias with non-scalar type",
+			input:        "type UserID = ValueTypeID\n",
+			expectedName: "UserID",
+			expectedType: "ValueTypeID",
+			wantErr:      false,
+		},
+		{
+			name:         "type alias with fully qualified non-scalar type",
+			input:        "type UserID = acme.common.v1.UUID\n",
+			expectedName: "UserID",
+			expectedType: "acme.common.v1.UUID",
+			wantErr:      false,
+		},
+		{
+			name:         "type alias with fully qualified type",
+			input:        "type UserID = acme.common.v1.UUID\n",
+			expectedName: "UserID",
+			expectedType: "acme.common.v1.UUID",
+			wantErr:      false,
+		},
+		{
+			name:    "error on missing equals",
+			input:   "type Email string\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing name",
+			input:   "type = string\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			assert.Equal(t, 1, len(stencil.Specs), "expected 1 spec")
+
+			typeAlias, ok := stencil.Specs[0].(*ast.TypeAlias)
+			assert.True(t, ok, "expected spec to be a TypeAlias")
+
+			assert.Equal(t, tc.expectedName, typeAlias.Name.Value)
+			assert.Equal(t, tc.expectedType, typeAlias.Type.Base.String())
+		})
+	}
+}

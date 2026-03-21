@@ -159,7 +159,73 @@ func (e *Enum) Position() Position {
 	return e.Pos
 }
 
-func (e *Enum) specNode() {}
+type TypeAlias struct {
+	Pos         Position
+	Name        StringLiteral
+	Type        TypeExpression
+	HeadComment *CommentGroup
+	LineComment *Comment
+}
+
+func (a *TypeAlias) Position() Position {
+	return a.Pos
+}
+
+type TypeExpression struct {
+	Pos Position
+	// Base is either a qualified identifier or scalar type name
+	Base QualifiedIdent
+	// GenericArgs (e.g., <User, ApiError>)
+	GenericArgs []TypeExpression
+	IsArray     bool
+	IsOptional  bool
+}
+
+func (t *TypeExpression) Position() Position {
+	return t.Pos
+}
+
+func (t *TypeExpression) IsScalar() bool {
+	if len(t.Base.Parts) != 1 {
+		return false
+	}
+	scalar := t.Base.Parts[0]
+	switch scalar {
+	case "string", "int", "float", "boolean", "uuid", "timestamp", "date", "any":
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *TypeExpression) String() string {
+	sb := strings.Builder{}
+	sb.WriteString(t.Base.String())
+
+	if len(t.GenericArgs) > 0 {
+		sb.WriteString("<")
+		for i, arg := range t.GenericArgs {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(arg.String())
+		}
+		sb.WriteString(">")
+	}
+
+	if t.IsArray {
+		sb.WriteString("[]")
+	}
+
+	if t.IsOptional {
+		sb.WriteString("?")
+	}
+
+	return sb.String()
+}
+
+func (e *Enum) specNode()      {}
+func (a *TypeAlias) specNode() {}
 
 // Stencil represents the entire parsed file. This will be used for any code generation.
 type Stencil struct {

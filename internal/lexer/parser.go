@@ -47,6 +47,17 @@ func (p *parserState) next() item {
 	}
 }
 
+// peekAny checks if the next token is any of the provided types, returning the token and true if it is.
+func (p *parserState) peekAny(types ...itemType) (item, bool) {
+	it := p.peek()
+	for _, typ := range types {
+		if it.typ == typ {
+			return it, true
+		}
+	}
+	return it, false
+}
+
 // peek (skips newlines)
 func (p *parserState) peek() item {
 	if p.peeked != nil {
@@ -144,15 +155,9 @@ func itemStringLiteral(i item) ast.StringLiteral {
 	}
 }
 
-// parseNamespace parses a namespace declaration, e.g.:
+// parseNamespace parses a namespace declaration.
 //
-//	namespace QualifiedIdent NEWLINE
-//
-// A namespace may have a header comment (single preceding line is a comment)
-// or a line comment, e.g:
-//
-//	Comment
-//	namespace QualifiedIdent Comment NEWLINE
+// A namespace may have a header comment (single preceding line is a comment) or a line comment.
 func (p *parserState) parseNamespace(leading *ast.Comment) (*ast.Namespace, error) {
 	kw, err := p.expect(itemKeywordNamespace)
 	if err != nil {
@@ -280,8 +285,7 @@ func (p *parserState) parseEnum(group *ast.CommentGroup) (*ast.Enum, error) {
 		Name:        *name,
 	}
 
-	_, err = p.expect(itemLeftBrace)
-	if err != nil {
+	if _, err = p.expect(itemLeftBrace); err != nil {
 		return nil, err
 	}
 
@@ -342,6 +346,65 @@ func (p *parserState) parseStringLiteral() (*ast.StringLiteral, error) {
 	}, nil
 }
 
+func (p *parserState) parseTypeAlias(group *ast.CommentGroup) (*ast.TypeAlias, error) {
+	it, err := p.expect(itemKeywordType)
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := p.parseIdent("type alias")
+	if err != nil {
+		return nil, err
+	}
+
+	typeAlias := &ast.TypeAlias{
+		Pos:         itemPos(it),
+		HeadComment: group,
+		Name:        *name,
+	}
+
+	if _, err = p.expect(itemEquals); err != nil {
+		return nil, err
+	}
+
+	var aliased *ast.QualifiedIdent
+	if it, ok := p.peekAny(itemKeywordString, itemKeywordInt, itemKeywordFloat, itemKeywordBoolean, itemKeywordUUID, itemKeywordTimestamp, itemKeywordDate, itemKeywordAny); ok {
+		p.next() // consume scalar type
+		aliased = &ast.QualifiedIdent{
+			Pos:   itemPos(it),
+			Parts: []string{it.String()},
+		}
+	} else {
+		aliased, err = p.parseQualifiedIdent("type alias type")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var isOptional bool
+	var isArray bool
+	if p.peek().typ == itemQuestion {
+		isOptional = true
+		p.next() // consume '?'
+	} else if p.peek().typ == itemLeftBracket {
+		isArray = true
+		p.next() // consume '['
+		if _, err = p.expect(itemRightBracket); err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO: genericArgs, etc
+	typeAlias.Type = ast.TypeExpression{
+		Pos:        aliased.Position(),
+		Base:       *aliased,
+		IsOptional: isOptional,
+		IsArray:    isArray,
+	}
+
+	return typeAlias, nil
+}
+
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
 // duplicate declarations, imports defined after models, etc.)
 func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
@@ -350,9 +413,7 @@ func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
 	return nil
 }
 
-// Parse both lexes and parses the input, returning the root Stencil AST node.
-// The AST semantics are validated prior to return.
-// NOTE: the AST is non-nil in the event of an error, allowing the caller to inspect the partially constructed AST.
+// Parse both lexes and parses the input, returning the func (p *parserState) parseTypeAlias(group *ast.CommentGroup) (*ast.TypeAlias, interface{}) {	 AST is non-nil in the event of an error, allowing the caller to inspect the partially constructed AST.
 func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 	l := lex("input", text)
 	l.run()
@@ -458,6 +519,21 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			}
 
 			stencil.Specs = append(stencil.Specs, e)
+
+		case itemKeywordType:
+			var group *ast.CommentGroup
+			if len(comments) > 0 {
+				group = &ast.CommentGroup{Comments: comments}
+				// trim from file comments
+				stencil.Comments = stencil.Comments[:len(stencil.Comments)-len(comments)]
+			}
+
+			a, err := pp.parseTypeAlias(group)
+			if err != nil {
+				return nil, err
+			}
+
+			stencil.Specs = append(stencil.Specs, a)
 
 		default:
 			pp.next()
