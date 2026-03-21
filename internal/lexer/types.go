@@ -81,7 +81,7 @@ const (
 	itemKeywordHEAD
 	itemKeywordOPTIONS
 
-	// decorators
+	// Decorator keywords (not in global keywords map - lexed as identifiers, recognized in parseDecorator)
 	itemKeywordVersion
 	itemKeywordStyle
 	itemKeywordBasePath
@@ -91,14 +91,13 @@ const (
 	itemKeywordErrors
 	itemKeywordSummary
 	itemKeywordTag
-	// input/model "special" decorators are emitted as identifiers
-	// itemKeywordDeprecated
-	// itemKeywordRaw
-	// itemKeywordDefault
-	// itemKeywordPrimary
-	// itemKeywordUnique
-	// itemKeywordUpdatedAt
-	// itemKeywordRelation
+	itemKeywordDeprecated
+	itemKeywordRaw
+	itemKeywordDefault
+	itemKeywordPrimary
+	itemKeywordUnique
+	itemKeywordUpdatedAt
+	itemKeywordRelation
 
 	// API styles
 	itemKeywordREST
@@ -259,25 +258,12 @@ var keywords = map[string]itemType{
 	keywordDELETE:    itemKeywordDELETE,
 	keywordHEAD:      itemKeywordHEAD,
 	keywordOPTIONS:   itemKeywordOPTIONS,
-	keywordVersion:   itemKeywordVersion,
-	keywordStyle:     itemKeywordStyle,
-	keywordBasePath:  itemKeywordBasePath,
-	keywordAuth:      itemKeywordAuth,
-	keywordBody:      itemKeywordBody,
-	keywordQuery:     itemKeywordQuery,
-	keywordErrors:    itemKeywordErrors,
-	keywordSummary:   itemKeywordSummary,
-	keywordTag:       itemKeywordTag,
 	// Decorator-only keywords are NOT included here - they're only recognized after @
-	// keywordDeprecated, keywordRaw, keywordDefault, keywordPrimary, keywordUnique,
-	// keywordUpdatedAt, keywordRelation - these are handled in parseDecorator()
-	// keywordDeprecated: itemKeywordDeprecated,
-	// keywordRaw:        itemKeywordRaw,
-	// keywordDefault:    itemKeywordDefault,
-	// keywordPrimary:    itemKeywordPrimary,
-	// keywordUnique:     itemKeywordUnique,
-	// keywordUpdatedAt:  itemKeywordUpdatedAt,
-	// keywordRelation:   itemKeywordRelation,
+	// Model field decorators: keywordDeprecated, keywordRaw, keywordDefault, keywordPrimary,
+	//   keywordUnique, keywordUpdatedAt, keywordRelation
+	// API/route decorators: keywordVersion, keywordStyle, keywordBasePath, keywordAuth,
+	//   keywordBody, keywordQuery, keywordErrors, keywordSummary, keywordTag
+	// These are all handled in parseDecorator()
 	keywordREST:      itemKeywordREST,
 	keywordEvents:    itemKeywordEvents,
 	keywordBearer:    itemKeywordBearer,

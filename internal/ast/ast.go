@@ -5,11 +5,13 @@ import (
 	"strings"
 )
 
-// Position represents the line and column of a node in the source file.
-type Position struct {
-	Line int
-	Col  int
-}
+type ApiStyle int
+
+const (
+	REST = iota
+	RPC
+	EVENTS
+)
 
 // Node is the base interface for all AST nodes.
 type Node interface {
@@ -28,6 +30,17 @@ type SpecNode interface {
 type TypeNode interface {
 	Node
 	typeNode() // disallows other Node values where TypeNode is required
+}
+
+// Route defines the shared interface for rest, rpc, event style routes
+type Route interface {
+	Style() ApiStyle
+}
+
+// Position represents the line and column of a node in the source file.
+type Position struct {
+	Line int
+	Col  int
 }
 
 // QualifiedIdent represents a qualified identifier, a dot-delimited set of identifiers (e.g., foo.bar.baz).
@@ -344,10 +357,53 @@ func (i *Input) Position() Position {
 	return i.Pos
 }
 
+type Api struct {
+	Pos           Position
+	Name          StringLiteral
+	Style         ApiStyle
+	ApiDecorators []Decorator // before '{', control features within api block
+	ApiDirectives []Decorator
+	Routes        []Route
+	HeadComment   *CommentGroup
+}
+
+func (a *Api) Position() Position {
+	return a.Pos
+}
+
+type RestRoute struct {
+	Pos         Position
+	Method      string
+	Path        []PathSegment
+	Return      TypeExpression
+	Decorators  []Decorator
+	HeadComment *CommentGroup
+}
+
+func (r *RestRoute) Position() Position {
+	return r.Pos
+}
+
+func (r *RestRoute) Style() ApiStyle {
+	return REST
+}
+
+type PathSegment struct {
+	Pos Position
+	// Value is the literal value of the segment (e.g. "users" for /users or ":id" for /:id)
+	Value   string
+	IsParam bool
+}
+
+func (s *PathSegment) Position() Position {
+	return s.Pos
+}
+
 func (e *Enum) specNode()      {}
 func (a *TypeAlias) specNode() {}
 func (m *Model) specNode()     {}
 func (i *Input) specNode()     {}
+func (a *Api) specNode()       {}
 
 func (s *StringLiteral) typeNode()  {}
 func (i *IntLiteral) typeNode()     {}

@@ -275,7 +275,7 @@ api UserService @version(2) @style(rest) {
 }
 ```
 
-**API-level decorators** (on the `api` declaration):
+**API-level decorators** (on the `api` declaration) which control features within the `api` block:
 
 | Decorator     | Meaning                                                   |
 |---------------|-----------------------------------------------------------|

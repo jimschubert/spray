@@ -2,6 +2,7 @@ package lexer
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jimschubert/spray/internal/ast"
 )
@@ -145,6 +146,11 @@ func (p *parserState) collectComments() []*ast.Comment {
 // itemPos gets an ast.Position from an item
 func itemPos(i item) ast.Position {
 	return ast.Position{Line: i.line, Col: int(i.pos)}
+}
+
+// isKeyword checks if an itemType is a keyword token
+func isKeyword(typ itemType) bool {
+	return typ >= itemKeywordNamespace && typ <= itemKeywordAny
 }
 
 // itemStringLiteral converts an item to an ast.StringLiteral
@@ -469,46 +475,46 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 	if p.peek().typ == itemLeftParen {
 		p.next() // consume '('
 
-		// special values (not treated as identifiers)
+		// check for special literal values first
 		if special, ok := p.peekAny(itemKeywordNow, itemString, itemInt, itemFloat); ok {
 			p.next() // consume keyword or literal
 			decorator.Args.Set(special.val, nil, itemPos(special))
-		} else {
-			if p.peek().typ == itemIdent {
-				keyOrValue := p.next() // consume identifier
+		} else if p.peek().typ == itemIdent || isKeyword(p.peek().typ) {
+			// Accept identifiers or any keyword as decorator argument values
+			// Keywords like 'rest', 'bearer', 'events' can be used as values in decorators
+			keyOrValue := p.next() // consume identifier or keyword
 
-				// if `key: value` syntax
-				if p.peek().typ == itemColon {
-					p.next() // consume ':'
+			// Check if this is `key: value` syntax
+			if p.peek().typ == itemColon {
+				p.next() // consume ':'
 
-					if valueIdent, ok := p.peekAny(itemIdent); ok {
-						p.next() // consume identifier
-
-						typeExpr := &ast.TypeExpression{
-							Pos: itemPos(valueIdent),
-							Base: ast.QualifiedIdent{
-								Pos:   itemPos(valueIdent),
-								Parts: []string{valueIdent.val},
-							},
-						}
-						decorator.Args.Set(keyOrValue.val, typeExpr, itemPos(keyOrValue))
-					} else {
-						return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier after ':' in decorator argument"}
-					}
-				} else {
-					// simple expression like @default(something)
+				// Value after colon can be identifier or keyword
+				if p.peek().typ == itemIdent || isKeyword(p.peek().typ) {
+					valueToken := p.next() // consume value
 					typeExpr := &ast.TypeExpression{
-						Pos: itemPos(keyOrValue),
+						Pos: itemPos(valueToken),
 						Base: ast.QualifiedIdent{
-							Pos:   itemPos(keyOrValue),
-							Parts: []string{keyOrValue.val},
+							Pos:   itemPos(valueToken),
+							Parts: []string{valueToken.val},
 						},
 					}
 					decorator.Args.Set(keyOrValue.val, typeExpr, itemPos(keyOrValue))
+				} else {
+					return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier or keyword after ':' in decorator argument"}
 				}
 			} else {
-				return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier, string literal, or special value as decorator argument"}
+				// Simple value like @style(rest) or @default(member)
+				typeExpr := &ast.TypeExpression{
+					Pos: itemPos(keyOrValue),
+					Base: ast.QualifiedIdent{
+						Pos:   itemPos(keyOrValue),
+						Parts: []string{keyOrValue.val},
+					},
+				}
+				decorator.Args.Set(keyOrValue.val, typeExpr, itemPos(keyOrValue))
 			}
+		} else {
+			return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier, keyword, string literal, or special value as decorator argument"}
 		}
 
 		if _, err = p.expect(itemRightParen); err != nil {
@@ -687,6 +693,196 @@ func (p *parserState) parseModel(group *ast.CommentGroup) (*ast.Model, error) {
 	return model, nil
 }
 
+func (p *parserState) parseRestRoute() (*ast.RestRoute, error) {
+	comments := p.collectComments()
+	var kw item
+	if i, ok := p.peekAny(itemKeywordGET, itemKeywordPOST, itemKeywordPUT, itemKeywordPATCH, itemKeywordDELETE, itemKeywordOPTIONS, itemKeywordHEAD); ok {
+		kw = i
+		p.next() // consume HTTP method keyword
+	} else {
+		return nil, &ParsingError{
+			Pos:     itemPos(p.peek()),
+			Message: fmt.Sprintf("invalid HTTP method '%s' for REST route", p.peek().val),
+		}
+	}
+
+	route := &ast.RestRoute{
+		Pos:    itemPos(kw),
+		Method: kw.val,
+	}
+
+	if len(comments) > 0 {
+		route.HeadComment = &ast.CommentGroup{Comments: comments}
+	}
+
+	_, err := p.expect(itemSlash)
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		it := p.peek()
+		if it.typ == itemArrow {
+			p.next() // consume '->'
+			break
+		}
+		if it.typ == itemSlash {
+			p.next() // consume '/'
+			continue
+		}
+		if it.typ == itemIdent || it.typ == itemColon {
+			pathSegment := ast.PathSegment{
+				Pos:     itemPos(it),
+				Value:   it.val,
+				IsParam: strings.HasPrefix(it.val, ":"),
+			}
+			if it.typ == itemColon {
+				pathSegment.IsParam = true
+				p.next() // consume ':'
+				if p.peek().typ != itemIdent {
+					return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier after ':' in path parameter"}
+				}
+				pathSegment.Value = p.next().val // consume parameter name
+			} else {
+				p.next() // consume path segment
+			}
+
+			route.Path = append(route.Path, pathSegment)
+		} else {
+			return nil, &ParsingError{Pos: itemPos(it), Message: "unexpected token in route path; expected identifier, ':', or '->'"}
+		}
+	}
+
+	if p.peek().typ != itemIdent {
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected return type after '->' in route declaration"}
+	}
+
+	returnType, err := p.parseTypeExpression()
+	if err != nil {
+		return nil, err
+	}
+	route.Return = *returnType
+
+	// parse optional decorators on route
+	for p.peek().typ == itemAt {
+		decorator, err := p.parseDecorator()
+		if err != nil {
+			return nil, err
+		}
+		route.Decorators = append(route.Decorators, *decorator)
+	}
+
+	return route, nil
+}
+
+func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
+	kw, err := p.expect(itemKeywordAPI)
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := p.parseIdent("api")
+	if err != nil {
+		return nil, err
+	}
+
+	api := &ast.Api{
+		Pos:         itemPos(kw),
+		HeadComment: group,
+		Name:        *name,
+	}
+
+	for p.peek().typ == itemAt {
+		decorator, err := p.parseDecorator()
+		if err != nil {
+			return nil, err
+		}
+
+		if decorator.Name != "version" && decorator.Name != "style" {
+			return nil, &ParsingError{
+				Pos:     decorator.Position(),
+				Message: "only 'version' and 'style' decorators are allowed on API before block opening brace",
+			}
+		}
+
+		// if ApiDecorators already contains the decorator, this is an error (no duplicates)
+		for _, d := range api.ApiDecorators {
+			if d.Name == decorator.Name {
+				return nil, &ParsingError{
+					Pos:     decorator.Position(),
+					Message: fmt.Sprintf("duplicate decorator '%s' on API", decorator.Name),
+				}
+			}
+		}
+
+		api.ApiDecorators = append(api.ApiDecorators, *decorator)
+
+		if decorator.Name == "style" {
+			decorator.Args.All()(func(s string, node ast.TypeNode) bool {
+				switch s {
+				case "rest":
+					api.Style = ast.REST
+				case "rpc":
+					api.Style = ast.RPC
+				case "events":
+					api.Style = ast.EVENTS
+				default:
+					err = &ParsingError{
+						Pos:     decorator.Position(),
+						Message: fmt.Sprintf("invalid argument '%s' for @style decorator; expected 'rest', 'rpc', or 'events'", s),
+					}
+				}
+				return true
+			})
+		}
+	}
+
+	_, err = p.expect(itemLeftBrace) // consume '{'
+	if err != nil {
+		return nil, err
+	}
+
+	if len(api.ApiDecorators) == 0 {
+		api.Style = ast.REST
+	}
+
+	for p.peek().typ == itemAt {
+		directive, err := p.parseDecorator()
+		if err != nil {
+			return nil, err
+		}
+		api.ApiDirectives = append(api.ApiDirectives, *directive)
+	}
+
+	// TODO: currently only support REST…implement parse of other routes
+	switch api.Style {
+	case ast.REST:
+		for {
+			next := p.peek()
+			if next.typ == itemRightBrace {
+				break
+			}
+			route, err := p.parseRestRoute()
+			if err != nil {
+				return nil, err
+			}
+			api.Routes = append(api.Routes, route)
+		}
+	default:
+		return nil, &ParsingError{
+			Pos:     itemPos(p.peek()),
+			Message: fmt.Sprintf("unsupported API style or not yet implemented '%T'", api.Style),
+		}
+	}
+
+	_, err = p.expect(itemRightBrace) // consume '}'
+	if err != nil {
+		return nil, err
+	}
+
+	return api, nil
+}
+
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
 // duplicate declarations, imports defined after models, etc.)
 func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
@@ -846,6 +1042,21 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			}
 
 			stencil.Specs = append(stencil.Specs, input)
+
+		case itemKeywordAPI:
+			var group *ast.CommentGroup
+			if len(comments) > 0 {
+				group = &ast.CommentGroup{Comments: comments}
+				// trim from file comments
+				stencil.Comments = stencil.Comments[:len(stencil.Comments)-len(comments)]
+			}
+
+			api, err := pp.parseApi(group)
+			if err != nil {
+				return nil, err
+			}
+
+			stencil.Specs = append(stencil.Specs, api)
 
 		default:
 			pp.next()
