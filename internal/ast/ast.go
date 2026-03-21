@@ -399,6 +399,24 @@ func (s *PathSegment) Position() Position {
 	return s.Pos
 }
 
+type RpcRoute struct {
+	Pos         Position
+	Streaming   bool
+	Name        StringLiteral
+	Input       TypeExpression
+	Return      TypeExpression
+	Decorators  []Decorator
+	HeadComment *CommentGroup
+}
+
+func (r *RpcRoute) Position() Position {
+	return r.Pos
+}
+
+func (r *RpcRoute) Style() ApiStyle {
+	return RPC
+}
+
 func (e *Enum) specNode()      {}
 func (a *TypeAlias) specNode() {}
 func (m *Model) specNode()     {}

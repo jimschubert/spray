@@ -126,7 +126,7 @@ func TestParseApi_RouteREST(t *testing.T) {
 	}
 }
 
-func TestParseApi_ApiREST(t *testing.T) {
+func TestParseApi_REST(t *testing.T) {
 	testCases := []struct {
 		name             string
 		input            string
@@ -160,6 +160,34 @@ func TestParseApi_ApiREST(t *testing.T) {
 			expectDirectives: []string{"auth", "basePath"},
 			endpointCount:    2,
 			wantErr:          false,
+		},
+		{
+			name: "api cannot mix styles with style decorator defined",
+			input: `api MyApi @style(rest) @version(1) {
+  @auth(bearer)
+  @basePath("/api")
+			
+  GET /users -> User[]
+  
+  POST /users -> User
+  
+  rpc stream Chat(ChatInput) -> ChatMessage
+}`,
+			wantErr: true,
+		},
+		{
+			name: "api cannot mix styles with style decorator undefined",
+			input: `api MyApi @version(1) {
+  @auth(bearer)
+  @basePath("/api")
+			
+  GET /users -> User[]
+  
+  POST /users -> User
+  
+  rpc stream Chat(ChatInput) -> ChatMessage
+}`,
+			wantErr: true,
 		},
 	}
 
@@ -199,6 +227,11 @@ func TestParseApi_ApiREST(t *testing.T) {
 			}
 
 			assert.Equal(t, tc.endpointCount, len(apiSpec.Routes), "endpoint count mismatch")
+
+			for _, route := range apiSpec.Routes {
+				_, ok := route.(*ast.RestRoute)
+				assert.True(t, ok, "expected route to be RestRoute")
+			}
 		})
 	}
 }

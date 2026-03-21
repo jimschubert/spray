@@ -775,6 +775,67 @@ func (p *parserState) parseRestRoute() (*ast.RestRoute, error) {
 	return route, nil
 }
 
+func (p *parserState) parseRpcRoute() (*ast.RpcRoute, error) {
+	comments := p.collectComments()
+	kw, err := p.expect(itemKeywordRPC)
+	if err != nil {
+		return nil, err
+	}
+
+	route := &ast.RpcRoute{
+		Pos: itemPos(kw),
+	}
+
+	if len(comments) > 0 {
+		route.HeadComment = &ast.CommentGroup{Comments: comments}
+	}
+
+	if p.peek().typ == itemKeywordStream {
+		p.next() // consume 'stream'
+		route.Streaming = true
+	}
+
+	name, err := p.parseIdent("RPC route name")
+	if err != nil {
+		return nil, err
+	}
+	route.Name = *name
+
+	// input parameter is optional
+	if p.peek().typ == itemLeftParen {
+		p.next() // consume '('
+
+		inputType, err := p.parseTypeExpression()
+		if err != nil {
+			return nil, err
+		}
+		route.Input = *inputType
+		if _, err = p.expect(itemRightParen); err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err = p.expect(itemArrow); err != nil {
+		return nil, err
+	}
+
+	returnType, err := p.parseTypeExpression()
+	if err != nil {
+		return nil, err
+	}
+	route.Return = *returnType
+
+	for p.peek().typ == itemAt {
+		decorator, err := p.parseDecorator()
+		if err != nil {
+			return nil, err
+		}
+		route.Decorators = append(route.Decorators, *decorator)
+	}
+
+	return route, nil
+}
+
 func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 	kw, err := p.expect(itemKeywordAPI)
 	if err != nil {
@@ -854,7 +915,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 		api.ApiDirectives = append(api.ApiDirectives, *directive)
 	}
 
-	// TODO: currently only support REST…implement parse of other routes
+	// TODO: support ast.EVENTS
 	switch api.Style {
 	case ast.REST:
 		for {
@@ -863,6 +924,18 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 				break
 			}
 			route, err := p.parseRestRoute()
+			if err != nil {
+				return nil, err
+			}
+			api.Routes = append(api.Routes, route)
+		}
+	case ast.RPC:
+		for {
+			next := p.peek()
+			if next.typ == itemRightBrace {
+				break
+			}
+			route, err := p.parseRpcRoute()
 			if err != nil {
 				return nil, err
 			}
