@@ -836,6 +836,62 @@ func (p *parserState) parseRpcRoute() (*ast.RpcRoute, error) {
 	return route, nil
 }
 
+func (p *parserState) parseEventRoute() (*ast.EventRoute, error) {
+	comments := p.collectComments()
+	kw, ok := p.peekAny(itemKeywordPublish, itemKeywordSubscribe)
+	if !ok {
+		return nil, &ParsingError{
+			Pos:     itemPos(p.peek()),
+			Message: fmt.Sprintf("expected 'publish' or 'subscribe' for event route declaration, got '%s'", p.peek().val),
+		}
+	}
+
+	_ = p.next() // consume 'publish' or 'subscribe'
+
+	var direction ast.EventDirection
+	switch kw.val {
+	case "publish":
+		direction = ast.PUBLISH
+	case "subscribe":
+		direction = ast.SUBSCRIBE
+	}
+	eventRoute := &ast.EventRoute{
+		Pos:       itemPos(kw),
+		Direction: direction,
+	}
+
+	if len(comments) > 0 {
+		eventRoute.HeadComment = &ast.CommentGroup{Comments: comments}
+	}
+
+	name, err := p.expect(itemIdent)
+	if err != nil {
+		return nil, err
+	}
+	eventRoute.Name = itemStringLiteral(name)
+
+	if _, err = p.expect(itemArrow); err != nil {
+		return nil, err
+	}
+
+	eventType, err := p.parseTypeExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	eventRoute.Event = *eventType
+
+	for p.peek().typ == itemAt {
+		decorator, err := p.parseDecorator()
+		if err != nil {
+			return nil, err
+		}
+		eventRoute.Decorators = append(eventRoute.Decorators, *decorator)
+	}
+
+	return eventRoute, nil
+}
+
 func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 	kw, err := p.expect(itemKeywordAPI)
 	if err != nil {
@@ -915,7 +971,6 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 		api.ApiDirectives = append(api.ApiDirectives, *directive)
 	}
 
-	// TODO: support ast.EVENTS
 	switch api.Style {
 	case ast.REST:
 		for {
@@ -936,6 +991,18 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 				break
 			}
 			route, err := p.parseRpcRoute()
+			if err != nil {
+				return nil, err
+			}
+			api.Routes = append(api.Routes, route)
+		}
+	case ast.EVENTS:
+		for {
+			next := p.peek()
+			if next.typ == itemRightBrace {
+				break
+			}
+			route, err := p.parseEventRoute()
 			if err != nil {
 				return nil, err
 			}

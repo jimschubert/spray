@@ -9,6 +9,11 @@ These are potential decorator extensions to consider in future iterations.
   supported by OpenAPI schema generation and likely a useful addition later. Or `@contraint(min=value,max=value,pattern=/[a-z]/)`?
 - `@example(label: "hello")` — Named example values for fields or routes. Could drive sample payloads in OpenAPI
   output. Need to review later if `@raw(openapi)` (or other) solves this and simplifies spray.
+- pub/sub specific decorators:
+  - `@routing(event_type: user.created)` — Topic or routing key mapping
+  - `@filter(region: US)` — Subscription filters
+  - `@headers(X-Source: auth-service)`
+  - `@deadLetter()` — Indicates that failed messages should be sent to a dead letter queue (would this need a name?)
 
 ## Streaming
 
