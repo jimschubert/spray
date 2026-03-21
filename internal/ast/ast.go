@@ -317,12 +317,24 @@ type Field struct {
 	LineComment *Comment
 }
 
+func (f *Field) Position() Position {
+	return f.Pos
+}
+
 type Input struct {
-	Pos Position
+	Pos         Position
+	Name        StringLiteral
+	Fields      []Field
+	HeadComment *CommentGroup
+}
+
+func (i *Input) Position() Position {
+	return i.Pos
 }
 
 func (e *Enum) specNode()      {}
 func (a *TypeAlias) specNode() {}
+func (i *Input) specNode()     {}
 
 func (s *StringLiteral) typeNode()  {}
 func (i *IntLiteral) typeNode()     {}

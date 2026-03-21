@@ -727,3 +727,127 @@ func TestParseTypeAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestParseInput(t *testing.T) {
+	testCases := []struct {
+		name               string
+		input              string
+		expectedFieldCount int
+		expectedFieldName  string
+		expectedFieldType  string
+		expectedDecorators int
+		wantErr            bool
+	}{
+		{
+			name:               "input with scalar fields on separate lines",
+			input:              "namespace test\ninput CreateUserInput {\n  email: string\n  name: string\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "input with non-scalar fields",
+			input:              "namespace test\ninput CreateUserInput {\n  email: string\n  profile: UserProfile\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "input with array field",
+			input:              "namespace test\ninput CreateUserInput {\n  email: string\n  tags: string[]\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "input with optional field",
+			input:              "namespace test\ninput CreateUserInput {\n  email: string\n  name: string?\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "input with @default decorator",
+			input:              "namespace test\ninput CreateUserInput {\n  email: string\n  role: UserRole @default(member)\n}\n",
+			expectedFieldName:  "role",
+			expectedFieldType:  "UserRole",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "input with @default(now)",
+			input:              "namespace test\ninput CreateUserInput {\n  email: string\n  createdAt: timestamp @default(now)\n}\n",
+			expectedFieldName:  "createdAt",
+			expectedFieldType:  "timestamp",
+			expectedDecorators: 1,
+			wantErr:            false,
+		},
+		{
+			name:               "input with multiple @default decorators on different fields",
+			input:              "namespace test\ninput PaginationInput {\n  limit: int @default(20)\n  cursor: Cursor?\n}\n",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:               "input with all optional fields",
+			input:              "namespace test\ninput FilterInput {\n  search: string?\n  limit: int?\n  offset: int?\n}\n",
+			expectedFieldCount: 3,
+			wantErr:            false,
+		},
+		{
+			name:    "error on missing field type",
+			input:   "namespace test\ninput CreateUserInput {\n  email\n}\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing field name",
+			input:   "namespace test\ninput CreateUserInput {\n  : string\n}\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on missing closing brace",
+			input:   "namespace test\ninput CreateUserInput {\n  email: string\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			// test allows only one input spec
+			var inputSpec *ast.Input
+			for _, spec := range stencil.Specs {
+				if inp, ok := spec.(*ast.Input); ok {
+					inputSpec = inp
+					break
+				}
+			}
+			assert.True(t, inputSpec != nil, "expected to find an Input spec")
+
+			if tc.expectedFieldCount > 0 {
+				assert.Equal(t, tc.expectedFieldCount, len(inputSpec.Fields))
+			}
+
+			if tc.expectedFieldName != "" {
+				found := false
+				for _, field := range inputSpec.Fields {
+					// tc.expectedFieldName allows for testing a single field, but test allows defining multiple
+					if field.Name.Value == tc.expectedFieldName {
+						found = true
+						assert.Equal(t, tc.expectedFieldType, field.Type.String())
+						assert.Equal(t, tc.expectedDecorators, len(field.Decorators))
+						break
+					}
+				}
+				assert.True(t, found, "expected field %q not found", tc.expectedFieldName)
+			}
+		})
+	}
+}

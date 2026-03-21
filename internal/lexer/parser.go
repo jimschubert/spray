@@ -439,7 +439,6 @@ func (p *parserState) parseTypeExpression() (*ast.TypeExpression, error) {
 		}
 	}
 
-	// TODO: genericArgs, etc
 	return &ast.TypeExpression{
 		Pos:         aliased.Position(),
 		Base:        *aliased,
@@ -447,6 +446,145 @@ func (p *parserState) parseTypeExpression() (*ast.TypeExpression, error) {
 		IsOptional:  isOptional,
 		IsArray:     isArray,
 	}, nil
+}
+
+func (p *parserState) parseDecorator() (*ast.Decorator, error) {
+	kw, err := p.expect(itemAt)
+	if err != nil {
+		return nil, err
+	}
+
+	decorator := &ast.Decorator{
+		Pos: itemPos(kw),
+	}
+
+	if it, ok := p.peekAny(itemKeywordDefault, itemKeywordPrimary, itemKeywordUnique); ok {
+		p.next() // consume keyword decorator
+		decorator.Name = it.String()
+	} else {
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected decorator name after '@'"}
+	}
+
+	if p.peek().typ == itemLeftParen {
+		p.next() // consume '('
+
+		if special, ok := p.peekAny(itemKeywordNow, itemString, itemInt, itemFloat); ok {
+			p.next() // consume 'now' keyword
+			decorator.Args.Set(special.val, nil, itemPos(special))
+		} else {
+			// TODO: revisit this peek to se if we need to support itemInt, itemFloat or others
+			key, ok := p.peekAny(itemIdent, itemString)
+			if !ok {
+				return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier or string literal as decorator argument"}
+			}
+
+			// type expression _might_ be overkill here as it allows generics. maybe a future item could to separate
+			// scalar parsing or do semantic validation to guard against user defining generics
+			arg, err := p.parseTypeExpression()
+			if err != nil {
+				return nil, err
+			}
+
+			decorator.Args.Set(key.val, arg, arg.Position())
+		}
+
+		if _, err = p.expect(itemRightParen); err != nil {
+			return nil, err
+		}
+	}
+
+	return decorator, nil
+}
+
+func (p *parserState) parseField() (*ast.Field, error) {
+	// collect comments to head comments. multiple leading comment groups will be a parser error
+	comments := p.collectComments()
+	if p.peek().typ != itemIdent {
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier at start of field declaration"}
+	}
+	name := p.next() // consume field name
+
+	_, err := p.expect(itemColon)
+	if err != nil {
+		return nil, err
+	}
+
+	typeExpr, err := p.parseTypeExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	var leading *ast.CommentGroup
+	if len(comments) > 0 {
+		leading = &ast.CommentGroup{Comments: comments}
+	}
+
+	field := &ast.Field{
+		Pos:         itemPos(name),
+		Name:        itemStringLiteral(name),
+		Type:        *typeExpr,
+		HeadComment: leading,
+	}
+
+	for {
+		next := p.peek()
+		switch {
+		case next.typ == itemAt:
+			decorator, err := p.parseDecorator()
+			if err != nil {
+				return nil, err
+			}
+			field.Decorators = append(field.Decorators, *decorator)
+			continue
+		case next.typ == itemComment:
+			comment := p.next()
+			field.LineComment = &ast.Comment{
+				Pos:  itemPos(comment),
+				Text: comment.val,
+			}
+			continue
+		default:
+			return field, nil
+		}
+	}
+}
+
+func (p *parserState) parseInput(group *ast.CommentGroup) (*ast.Input, error) {
+	kw, err := p.expect(itemKeywordInput)
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := p.parseIdent("input")
+	if err != nil {
+		return nil, err
+	}
+
+	input := &ast.Input{
+		Pos:         itemPos(kw),
+		HeadComment: group,
+		Name:        *name,
+	}
+
+	_, err = p.expect(itemLeftBrace)
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		next := p.peek()
+		if next.typ == itemRightBrace {
+			p.next() // consume right brace
+			break
+		}
+		field, err := p.parseField()
+		if err != nil {
+			return nil, err
+		}
+		input.Fields = append(input.Fields, *field)
+	}
+
+	return input, nil
 }
 
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
@@ -578,6 +716,21 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 			}
 
 			stencil.Specs = append(stencil.Specs, a)
+
+		case itemKeywordInput:
+			var group *ast.CommentGroup
+			if len(comments) > 0 {
+				group = &ast.CommentGroup{Comments: comments}
+				// trim from file comments
+				stencil.Comments = stencil.Comments[:len(stencil.Comments)-len(comments)]
+			}
+
+			input, err := pp.parseInput(group)
+			if err != nil {
+				return nil, err
+			}
+
+			stencil.Specs = append(stencil.Specs, input)
 
 		default:
 			pp.next()
