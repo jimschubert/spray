@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/alecthomas/kong v1.14.0
+	rsc.io/omap v1.2.0
 )
 
 require (

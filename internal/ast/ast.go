@@ -1,6 +1,9 @@
 package ast
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Position represents the line and column of a node in the source file.
 type Position struct {
@@ -17,6 +20,14 @@ type Node interface {
 type SpecNode interface {
 	Node
 	specNode() // disallows using other Node values where SpecNode is required; strategy taken from Go's own ast package
+}
+
+// TypeNode is an interface which is used for type expressions (e.g. field types, type alias definitions) and is used to
+// distinguish them from other nodes. This allows us to enforce that only type expressions can be used in certain contexts
+// (e.g. field definitions, type aliases).
+type TypeNode interface {
+	Node
+	typeNode() // disallows other Node values where TypeNode is required
 }
 
 // QualifiedIdent represents a qualified identifier, a dot-delimited set of identifiers (e.g., foo.bar.baz).
@@ -48,6 +59,24 @@ type StringLiteral struct {
 
 func (s *StringLiteral) Position() Position {
 	return s.Pos
+}
+
+type IntLiteral struct {
+	Pos   Position
+	Value int
+}
+
+func (i *IntLiteral) Position() Position {
+	return i.Pos
+}
+
+type FloatLiteral struct {
+	Pos   Position
+	Value float64
+}
+
+func (f *FloatLiteral) Position() Position {
+	return f.Pos
 }
 
 type Comment struct {
@@ -224,8 +253,82 @@ func (t *TypeExpression) String() string {
 	return sb.String()
 }
 
+type Decorator struct {
+	Pos  Position
+	Name string
+	// Args is an ordered map of argument name to value with position tracking.
+	Args OrderedTypeMap
+}
+
+func (d *Decorator) Position() Position {
+	return d.Pos
+}
+
+func (d *Decorator) String() string {
+	sb := strings.Builder{}
+	sb.WriteString("@")
+	sb.WriteString(d.Name)
+	first := true
+	d.Args.All()(func(key string, value TypeNode) bool {
+		if first {
+			sb.WriteString("(")
+			first = false
+		} else {
+			sb.WriteString(", ")
+		}
+
+		if value == nil {
+			// e.g. @default(now)
+			sb.WriteString(key)
+			return true
+		}
+
+		// e.g. @relation(key: value)
+		sb.WriteString(key)
+		sb.WriteString(": ")
+		switch v := value.(type) {
+		case *StringLiteral:
+			// parser will handle quoted and unquoted strings
+			sb.WriteString(v.Value)
+		case *IntLiteral:
+			sb.WriteString(fmt.Sprintf("%d", v.Value))
+		case *FloatLiteral:
+			sb.WriteString(fmt.Sprintf("%g", v.Value))
+		case *TypeExpression:
+			sb.WriteString(v.String())
+		default:
+			sb.WriteString("unknown")
+		}
+		return true
+	})
+
+	if !first {
+		sb.WriteString(")")
+	}
+	return sb.String()
+}
+
+type Field struct {
+	Pos         Position
+	Name        StringLiteral
+	Type        TypeExpression
+	Decorators  []Decorator
+	HeadComment *CommentGroup
+	LineComment *Comment
+}
+
+type Input struct {
+	Pos Position
+}
+
 func (e *Enum) specNode()      {}
 func (a *TypeAlias) specNode() {}
+
+func (s *StringLiteral) typeNode()  {}
+func (i *IntLiteral) typeNode()     {}
+func (f *FloatLiteral) typeNode()   {}
+func (t *TypeExpression) typeNode() {}
+func (q *QualifiedIdent) typeNode() {}
 
 // Stencil represents the entire parsed file. This will be used for any code generation.
 type Stencil struct {
