@@ -1043,3 +1043,114 @@ model User {
 		})
 	}
 }
+
+func TestParseModel_WithGenerics(t *testing.T) {
+	testCases := []struct {
+		name                  string
+		input                 string
+		expectedName          string
+		expectedGenericParams []string
+		expectedFieldCount    int
+		wantErr               bool
+	}{
+		{
+			name:                  "model with single generic parameter",
+			input:                 "namespace test\nmodel Page<T> {\n  data: T[]\n  total: int\n}\n",
+			expectedName:          "Page",
+			expectedGenericParams: []string{"T"},
+			expectedFieldCount:    2,
+			wantErr:               false,
+		},
+		{
+			name:                  "model with multiple generic parameters",
+			input:                 "namespace test\nmodel Result<T, E> {\n  ok: boolean\n  data: T?\n  error: E?\n}\n",
+			expectedName:          "Result",
+			expectedGenericParams: []string{"T", "E"},
+			expectedFieldCount:    3,
+			wantErr:               false,
+		},
+		{
+			name: "model with generic parameters from spec",
+			input: `namespace test
+model Page<T> {
+  data: T[]
+  nextCursor: Cursor?
+  total: int
+}
+`,
+			expectedName:          "Page",
+			expectedGenericParams: []string{"T"},
+			expectedFieldCount:    3,
+			wantErr:               false,
+		},
+		{
+			name:                  "model with three generic parameters",
+			input:                 "namespace test\nmodel Triple<A, B, C> {\n  first: A\n  second: B\n  third: C\n}\n",
+			expectedName:          "Triple",
+			expectedGenericParams: []string{"A", "B", "C"},
+			expectedFieldCount:    3,
+			wantErr:               false,
+		},
+		{
+			name:               "model without generic parameters",
+			input:              "namespace test\nmodel User {\n  id: uuid\n  name: string\n}\n",
+			expectedName:       "User",
+			expectedFieldCount: 2,
+			wantErr:            false,
+		},
+		{
+			name:    "error on empty generic parameter list",
+			input:   "namespace test\nmodel Page<> {\n  data: string\n}\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on unterminated generic parameter list",
+			input:   "namespace test\nmodel Page<T {\n  data: T\n}\n",
+			wantErr: true,
+		},
+		{
+			name:    "error on trailing comma in generic params",
+			input:   "namespace test\nmodel Result<T, E,> {\n  data: T\n}\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+
+			var modelSpec *ast.Model
+			for _, spec := range stencil.Specs {
+				if m, ok := spec.(*ast.Model); ok {
+					modelSpec = m
+					break
+				}
+			}
+			assert.True(t, modelSpec != nil, "expected to find a Model spec")
+			assert.Equal(t, tc.expectedName, modelSpec.Name.Value)
+
+			if tc.expectedGenericParams != nil {
+				assert.Equal(t, len(tc.expectedGenericParams), len(modelSpec.GenericParams))
+				for i, expectedParam := range tc.expectedGenericParams {
+					assert.Equal(t, expectedParam, modelSpec.GenericParams[i].Value)
+				}
+			} else {
+				assert.Equal(t, 0, len(modelSpec.GenericParams))
+			}
+
+			if tc.expectedFieldCount > 0 {
+				assert.Equal(t, tc.expectedFieldCount, len(modelSpec.Fields))
+			}
+		})
+	}
+}

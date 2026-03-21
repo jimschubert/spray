@@ -519,6 +519,39 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 	return decorator, nil
 }
 
+func (p *parserState) parseGenericParams() ([]ast.StringLiteral, error) {
+	if p.peek().typ != itemLeftAngle {
+		return nil, nil
+	}
+
+	p.next() // consume '<'
+
+	var params []ast.StringLiteral
+	for {
+		if p.peek().typ != itemIdent {
+			return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier in generic parameter list"}
+		}
+
+		param := p.next() // consume parameter name
+		params = append(params, itemStringLiteral(param))
+
+		if p.peek().typ == itemComma {
+			p.next() // consume comma, continue to next parameter
+			continue
+		} else if p.peek().typ == itemRightAngle {
+			p.next() // consume '>'
+			if len(params) == 0 {
+				return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "generic parameter list cannot be empty"}
+			}
+			break
+		} else {
+			return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected ',' or '>' in generic parameter list"}
+		}
+	}
+
+	return params, nil
+}
+
 func (p *parserState) parseField() (*ast.Field, error) {
 	// collect comments to head comments. multiple leading comment groups will be a parser error
 	comments := p.collectComments()
@@ -626,6 +659,12 @@ func (p *parserState) parseModel(group *ast.CommentGroup) (*ast.Model, error) {
 		HeadComment: group,
 		Name:        *name,
 	}
+
+	genericParams, err := p.parseGenericParams()
+	if err != nil {
+		return nil, err
+	}
+	model.GenericParams = genericParams
 
 	_, err = p.expect(itemLeftBrace)
 	if err != nil {

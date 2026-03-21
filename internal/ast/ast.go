@@ -322,10 +322,11 @@ func (f *Field) Position() Position {
 }
 
 type Model struct {
-	Pos         Position
-	Name        StringLiteral
-	Fields      []Field
-	HeadComment *CommentGroup
+	Pos           Position
+	Name          StringLiteral
+	GenericParams []StringLiteral
+	Fields        []Field
+	HeadComment   *CommentGroup
 }
 
 func (m *Model) Position() Position {

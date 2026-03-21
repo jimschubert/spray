@@ -194,22 +194,31 @@ structures).
 
 ## Generics
 
-Models can declare unconstrained generic type parameters.
+Models can declare unconstrained generic type parameters (e.g., `T`, `E`) that act as placeholders for concrete types.
 
->[!NOTE]  
+>[!NOTE]
 > Generic type parameters are **not supported** for `input` declarations. Inputs must be concrete types.
 
 ```stencil
-model Page<T> {
+model Page<T> {        // T is a type parameter (placeholder)
   data:       T[]
   nextCursor: Cursor?
   total:      int
 }
 
-model Result<T, E> {
+model Result<T, E> {  // T and E are type parameters
   ok:    boolean
   data:  T?
   error: E?
+}
+```
+
+**Usage with concrete types:**
+
+```stencil
+api UserService {
+  GET /users -> Page<User>  // T becomes User
+  GET /posts -> Page<Post>  // T becomes Post
 }
 ```
 
