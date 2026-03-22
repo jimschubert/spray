@@ -338,3 +338,394 @@ func TestLexStrings(t *testing.T) {
 		})
 	}
 }
+
+func TestLexPositions(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected []struct {
+			typ  itemType
+			val  string
+			line int
+			col  int
+		}
+	}{
+		{
+			name:  "single line positions",
+			input: "namespace acme\n",
+			expected: []struct {
+				typ  itemType
+				val  string
+				line int
+				col  int
+			}{
+				{
+					typ:  itemKeywordNamespace,
+					val:  "namespace",
+					line: 1,
+					col:  0,
+				},
+				{
+					typ:  itemIdent,
+					val:  "acme",
+					line: 1,
+					col:  10,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 1,
+					col:  14,
+				},
+			},
+		},
+		{
+			name:  "multiline positions",
+			input: "model User {\n  id: Foo\n}\n",
+			expected: []struct {
+				typ  itemType
+				val  string
+				line int
+				col  int
+			}{
+				{
+					typ:  itemKeywordModel,
+					val:  "model",
+					line: 1,
+					col:  0,
+				},
+				{
+					typ:  itemIdent,
+					val:  "User",
+					line: 1,
+					col:  6,
+				},
+				{
+					typ:  itemLeftBrace,
+					val:  "{",
+					line: 1,
+					col:  11,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 1,
+					col:  12,
+				},
+				{
+					typ:  itemIdent,
+					val:  "id",
+					line: 2,
+					col:  2,
+				},
+				{
+					typ:  itemColon,
+					val:  ":",
+					line: 2,
+					col:  4,
+				},
+				{
+					typ:  itemIdent,
+					val:  "Foo",
+					line: 2,
+					col:  6,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 2,
+					col:  9,
+				},
+				{
+					typ:  itemRightBrace,
+					val:  "}",
+					line: 3,
+					col:  0,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 3,
+					col:  1,
+				},
+			},
+		},
+		{
+			name:  "identifier at end of line has correct column",
+			input: "  foo\nbar\n",
+			expected: []struct {
+				typ  itemType
+				val  string
+				line int
+				col  int
+			}{
+				{
+					typ:  itemIdent,
+					val:  "foo",
+					line: 1,
+					col:  2,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 1,
+					col:  5,
+				},
+				{
+					typ:  itemIdent,
+					val:  "bar",
+					line: 2,
+					col:  0,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 2,
+					col:  3,
+				},
+			},
+		},
+		{
+			name:  "number at end of line has correct column",
+			input: "  42\n7\n",
+			expected: []struct {
+				typ  itemType
+				val  string
+				line int
+				col  int
+			}{
+				{
+					typ:  itemInt,
+					val:  "42",
+					line: 1,
+					col:  2,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 1,
+					col:  4,
+				},
+				{
+					typ:  itemInt,
+					val:  "7",
+					line: 2,
+					col:  0,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 2,
+					col:  1,
+				},
+			},
+		},
+		{
+			name:  "comment positions",
+			input: "namespace acme # comment\nmodel X {\n}\n",
+			expected: []struct {
+				typ  itemType
+				val  string
+				line int
+				col  int
+			}{
+				{
+					typ:  itemKeywordNamespace,
+					val:  "namespace",
+					line: 1,
+					col:  0,
+				},
+				{
+					typ:  itemIdent,
+					val:  "acme",
+					line: 1,
+					col:  10,
+				},
+				{
+					typ:  itemComment,
+					val:  "# comment",
+					line: 1,
+					col:  15,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 1,
+					col:  24,
+				},
+				{
+					typ:  itemKeywordModel,
+					val:  "model",
+					line: 2,
+					col:  0,
+				},
+				{
+					typ:  itemIdent,
+					val:  "X",
+					line: 2,
+					col:  6,
+				},
+				{
+					typ:  itemLeftBrace,
+					val:  "{",
+					line: 2,
+					col:  8,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 2,
+					col:  9,
+				},
+				{
+					typ:  itemRightBrace,
+					val:  "}",
+					line: 3,
+					col:  0,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 3,
+					col:  1,
+				},
+			},
+		},
+		{
+			name:  "decorator positions",
+			input: "  @default(\"x\")\n",
+			expected: []struct {
+				typ  itemType
+				val  string
+				line int
+				col  int
+			}{
+				{
+					typ:  itemAt,
+					val:  "@",
+					line: 1,
+					col:  2,
+				},
+				{
+					typ:  itemIdent,
+					val:  "default",
+					line: 1,
+					col:  3,
+				},
+				{
+					typ:  itemLeftParen,
+					val:  "(",
+					line: 1,
+					col:  10,
+				},
+				{
+					typ:  itemString,
+					val:  `"x"`,
+					line: 1,
+					col:  11,
+				},
+				{
+					typ:  itemRightParen,
+					val:  ")",
+					line: 1,
+					col:  14,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 1,
+					col:  15,
+				},
+			},
+		},
+		{
+			name:  "blank lines reset column correctly",
+			input: "namespace test\n\n  model User {\n  }\n",
+			expected: []struct {
+				typ  itemType
+				val  string
+				line int
+				col  int
+			}{
+				{
+					typ:  itemKeywordNamespace,
+					val:  "namespace",
+					line: 1,
+					col:  0,
+				},
+				{
+					typ:  itemIdent,
+					val:  "test",
+					line: 1,
+					col:  10,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 1,
+					col:  14,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 2,
+					col:  0,
+				},
+				{
+					typ:  itemKeywordModel,
+					val:  "model",
+					line: 3,
+					col:  2,
+				},
+				{
+					typ:  itemIdent,
+					val:  "User",
+					line: 3,
+					col:  8,
+				},
+				{
+					typ:  itemLeftBrace,
+					val:  "{",
+					line: 3,
+					col:  13,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 3,
+					col:  14,
+				},
+				{
+					typ:  itemRightBrace,
+					val:  "}",
+					line: 4,
+					col:  2,
+				},
+				{
+					typ:  itemNewline,
+					val:  "\n",
+					line: 4,
+					col:  3,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := lex("test", tc.input)
+			l.run()
+
+			for i, expected := range tc.expected {
+				got := l.nextItem()
+				assert.Equal(t, expected.typ, got.typ, "token %d type", i)
+				assert.Equal(t, expected.val, got.val, "token %d val", i)
+				assert.Equal(t, expected.line, got.line, "token %d line (val=%q)", i, got.val)
+				assert.Equal(t, expected.col, l.columnOf(got.pos), "token %d col (val=%q)", i, got.val)
+			}
+		})
+	}
+}
+

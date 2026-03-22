@@ -1,0 +1,121 @@
+package lexer
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/jimschubert/spray/internal/ast"
+)
+
+// semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
+// duplicate declarations, imports defined after models, etc.)
+func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
+	var err error
+
+	// find duplicate spec names
+	definedNames := make(map[string]bool)
+	for _, spec := range stencil.Specs {
+		var name string
+		var pos ast.Position
+		switch s := spec.(type) {
+		case *ast.Model:
+			name = s.Name.Value
+			pos = s.Name.Position()
+		case *ast.Input:
+			name = s.Name.Value
+			pos = s.Name.Position()
+		case *ast.Enum:
+			name = s.Name.Value
+			pos = s.Name.Position()
+		case *ast.TypeAlias:
+			name = s.Name.Value
+			pos = s.Name.Position()
+		case *ast.Api:
+			name = s.Name.Value
+			pos = s.Name.Position()
+		default:
+			continue
+		}
+
+		if definedNames[name] {
+			err = errors.Join(err, fmt.Errorf("duplicate definition: %q [line: %d, col: %d]", name, pos.Line, pos.Col))
+		}
+		definedNames[name] = true
+	}
+
+	for _, spec := range stencil.Specs {
+		switch s := spec.(type) {
+		case *ast.Model:
+			for _, field := range s.Fields {
+				for _, dec := range field.Decorators {
+					if !isValidModelDecorator(dec.Name) {
+						err = errors.Join(err, fmt.Errorf(
+							"invalid decorator %q for model field %q [line: %d, col: %d] (model supports: @primary, @unique, @default, @updatedAt, @relation, @deprecated, @raw)",
+							dec.Name,
+							field.Name.Value,
+							dec.Position().Line,
+							dec.Position().Col,
+						))
+					}
+				}
+			}
+
+		case *ast.Input:
+			for _, field := range s.Fields {
+				for _, dec := range field.Decorators {
+					if !isValidInputDecorator(dec.Name) {
+						err = errors.Join(err, fmt.Errorf(
+							"invalid decorator %q for input field %q [line: %d, col: %d] (input supports: @default, @raw)",
+							dec.Name, field.Name.Value,
+							dec.Position().Line,
+							dec.Position().Col,
+						))
+					}
+				}
+			}
+
+		case *ast.Api:
+			for _, dec := range s.ApiDecorators {
+				if !isValidApiLevelDecorator(dec.Name) {
+					err = errors.Join(err, fmt.Errorf(
+						"invalid API-level decorator %q [line: %d, col: %d] (api supports: @version, @style)",
+						dec.Name,
+						dec.Position().Line,
+						dec.Position().Col,
+					))
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+func isValidModelDecorator(name string) bool {
+	validDecorators := map[string]bool{
+		"default":    true,
+		"deprecated": true,
+		"primary":    true,
+		"raw":        true,
+		"relation":   true,
+		"unique":     true,
+		"updatedAt":  true,
+	}
+	return validDecorators[name]
+}
+
+func isValidInputDecorator(name string) bool {
+	validDecorators := map[string]bool{
+		"default": true,
+		"raw":     true,
+	}
+	return validDecorators[name]
+}
+
+func isValidApiLevelDecorator(name string) bool {
+	validDecorators := map[string]bool{
+		"style":   true,
+		"version": true,
+	}
+	return validDecorators[name]
+}

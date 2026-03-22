@@ -48,9 +48,9 @@ type lexer struct {
 	pos       Pos    // current position in the input.
 	line      int
 	startLine int
-	width     int    // width of last rune read from input.
-	items     []item // accumulated items
-	index     int    // current position in items slice for iteration
+	width     int // width of last rune read from input.
+	items     []item
+	index     int // current position in items slice for iteration
 	state     stateFn
 }
 
@@ -388,6 +388,21 @@ func (l *lexer) errorf(format string, args ...any) stateFn {
 		line: l.startLine,
 	})
 	return nil
+}
+
+// columnOf computes the column (0-indexed byte offset from the start of the line)
+// on-demand following the same approach of Go's text/template lexer. This is much simpler than tracking multiple
+// values for computing lines and columns during the lexical scanning.
+func (l *lexer) columnOf(p Pos) int {
+	// search backward from p-1 to find the last newline
+	// don't use strings.LastIndex
+	for i := int(p) - 1; i >= 0; i-- {
+		if l.input[i] == '\n' {
+			return int(p) - i - 1
+		}
+	}
+	// no \n found (p is on line 1)
+	return int(p)
 }
 
 // isWordBoundary checks whether a token at l.pos is followed by a word boundary, functionally similar to regex \b.
