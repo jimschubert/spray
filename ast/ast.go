@@ -149,6 +149,7 @@ func (cg *CommentGroup) IsEmpty() bool {
 	return len(cg.Comments) == 0
 }
 
+// RawPair is key/value pair of string->{string,int,float,nil} (used to extend outputs within a '@raw' block)
 type RawPair struct {
 	Pos   Position
 	Key   StringLiteral
@@ -159,6 +160,7 @@ func (r *RawPair) Position() Position {
 	return r.Pos
 }
 
+// RawBlock represents an '@raw' node which allows for the extension of target outputs.
 type RawBlock struct {
 	Pos    Position
 	Target StringLiteral
@@ -183,6 +185,7 @@ func (n *Namespace) Position() Position {
 	return n.Pos
 }
 
+// FullName is the reconstructed namespace - this may be a single string or a fully qualified "package" name (dot-delimited).
 func (n *Namespace) FullName() string {
 	return n.Name.String()
 }
@@ -217,6 +220,7 @@ func (i *Import) String() string {
 	return "import " + i.Path.String() + " { " + strings.Join(names, ", ") + " }"
 }
 
+// Enum represents a type which holds one or more string identifiers of that type (e.g. "Role" might hold "admin" and "user")
 type Enum struct {
 	Pos         Position
 	Name        StringLiteral
@@ -228,6 +232,7 @@ func (e *Enum) Position() Position {
 	return e.Pos
 }
 
+// TypeAlias represents a mechanism to associate one type to a new name.
 type TypeAlias struct {
 	Pos         Position
 	Name        StringLiteral
@@ -240,6 +245,7 @@ func (a *TypeAlias) Position() Position {
 	return a.Pos
 }
 
+// TypeExpression represents any known type, whether it is a scalar or user-defined type with or without generic type parameters.
 type TypeExpression struct {
 	Pos Position
 	// Base is either a qualified identifier or scalar type name
@@ -254,6 +260,7 @@ func (t *TypeExpression) Position() Position {
 	return t.Pos
 }
 
+// IsScalar reports whether this type is one of the built-in scalar types.
 func (t *TypeExpression) IsScalar() bool {
 	if len(t.Base.Parts) != 1 {
 		return false
@@ -293,6 +300,7 @@ func (t *TypeExpression) String() string {
 	return sb.String()
 }
 
+// Decorator represents an annotation (metadata) about some specification type or field.
 type Decorator struct {
 	Pos  Position
 	Name string
@@ -348,6 +356,7 @@ func (d *Decorator) String() string {
 	return sb.String()
 }
 
+// Field is a named type member within specification nodes like 'model' or 'input'.
 type Field struct {
 	Pos         Position
 	Name        StringLiteral
@@ -361,6 +370,8 @@ func (f *Field) Position() Position {
 	return f.Pos
 }
 
+// Model represents a data model item, containing fields and metadata. These differ from Input in that they intend to
+// document a full domain model, whereas Input are intended to represent _only_ value types used for API inputs.
 type Model struct {
 	Pos           Position
 	Name          StringLiteral
@@ -374,6 +385,7 @@ func (m *Model) Position() Position {
 	return m.Pos
 }
 
+// Input represents a value type used for API input. It is intentionally leaner than a Model to promote API best practices.
 type Input struct {
 	Pos         Position
 	Name        StringLiteral
@@ -385,6 +397,11 @@ func (i *Input) Position() Position {
 	return i.Pos
 }
 
+// Api represents the specification for an API (of ApiStyle type { StyleREST, StyleRPC, StyleEvents }).
+// The Routes of an Api are allowed to be of only one ApiStyle.
+// A Decorator (@style or @version) may exist in Api source prior to the opening block, and are metadata about the Api.
+// A Decorator (e.g. @basePath, @auth) may exist _within_ an Api source's block - these are called "directives"; these
+// are metadata defaults about all Route definitions.
 type Api struct {
 	Pos           Position
 	Name          StringLiteral
@@ -400,6 +417,7 @@ func (a *Api) Position() Position {
 	return a.Pos
 }
 
+// RestRoute represents a REST api route definition.
 type RestRoute struct {
 	Pos         Position
 	Method      string
@@ -417,6 +435,7 @@ func (r *RestRoute) Style() ApiStyle {
 	return StyleREST
 }
 
+// PathSegment is a single part of an Api route's path.
 type PathSegment struct {
 	Pos Position
 	// Value is the literal value of the segment (e.g. "users" for /users or ":id" for /:id)
@@ -428,6 +447,7 @@ func (s *PathSegment) Position() Position {
 	return s.Pos
 }
 
+// RpcRoute represents an RPC api route definition.
 type RpcRoute struct {
 	Pos         Position
 	Streaming   bool
@@ -446,6 +466,7 @@ func (r *RpcRoute) Style() ApiStyle {
 	return StyleRPC
 }
 
+// EventRoute represents an eventing api route definition.
 type EventRoute struct {
 	Pos         Position
 	Direction   EventDirection
