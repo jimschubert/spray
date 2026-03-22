@@ -6,6 +6,13 @@ import (
 	"github.com/jimschubert/spray/ast"
 )
 
+// JoinUnwrap is an interface that allows unwrapping a joined error into its aggregated errors.
+// Required because a joinError in stdlib has an Unwrap signature not exposed through errors.Unwrap; there might be some other way to access.
+type JoinUnwrap interface {
+	error
+	Unwrap() []error
+}
+
 // ParsingError represents an error encountered during parsing.
 type ParsingError struct {
 	Pos     ast.Position

@@ -1,11 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"log"
-	"os"
 
 	"github.com/alecthomas/kong"
+	"github.com/jimschubert/spray/internal/output"
 )
 
 var (
@@ -14,29 +14,34 @@ var (
 	commit      = "unknown SHA"
 )
 
+type kongExitCoderError interface {
+	kong.ExitCoder
+	error
+}
+
 var CLI struct {
-	Version kong.VersionFlag `short:"v" help:"Print version information"`
+	Validate ValidateCmd      `cmd:"" help:"Validate .stencil files without emitting"`
+	Version  kong.VersionFlag `short:"v" help:"Print version information"`
 }
 
 func main() {
 	formattedVersion := fmt.Sprintf("%s (%s)", version, commit)
 
-	kong.Parse(&CLI,
+	ctx := kong.Parse(&CLI,
 		kong.Name(programName),
-		kong.Description("[placeholder description]"),
+		kong.Description("A DSL for documenting APIs and data models. Write .stencil, emit as your next work of art."),
 		kong.UsageOnError(),
 		kong.Vars{
 			"version": formattedVersion,
 		},
 	)
 
-	if err := run(); err != nil {
-		log.Fatal(err)
+	err := ctx.Run()
+	if e, ok := errors.AsType[kongExitCoderError](err); ok {
+		ctx.FatalIfErrorf(e)
+	} else if err != nil {
+		// assume non-Kong errors are our errors, so optionally colorize as output.Errorf. The "%s" format string is required here.
+		_, _ = ctx.Stderr.Write([]byte(output.Errorf("%s", err.Error())))
+		ctx.Exit(1)
 	}
-}
-
-func run() error {
-	_, _ = fmt.Fprint(os.Stderr, "Not yet implemented")
-	os.Exit(1)
-	return nil
 }

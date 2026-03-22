@@ -6,7 +6,7 @@ before:
 
 builds:
   - id: spray
-    main: ./cmd/spray/main.go
+    main: ./cmd/spray
     binary: spray
     env:
       - CGO_ENABLED=0
