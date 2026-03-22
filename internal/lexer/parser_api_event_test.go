@@ -20,7 +20,7 @@ func TestParseApi_RouteEVENTS(t *testing.T) {
 		{
 			name:             "publish route with return type and no decorators",
 			input:            `publish   UserCreated -> UserCreatedEvent`,
-			expectDirection:  ast.PUBLISH,
+			expectDirection:  ast.EventPublish,
 			expectName:       "UserCreated",
 			expectReturnType: "UserCreatedEvent",
 			expectDecorators: []string{},
@@ -30,7 +30,7 @@ func TestParseApi_RouteEVENTS(t *testing.T) {
 		{
 			name:             "subscribe route with return type and decorators",
 			input:            `subscribe UserDeleted -> UserDeletedEvent @query(PaginationInput) @errors(404)`,
-			expectDirection:  ast.SUBSCRIBE,
+			expectDirection:  ast.EventSubscribe,
 			expectName:       "UserDeleted",
 			expectReturnType: "UserDeletedEvent",
 			expectDecorators: []string{"query", "errors"},
@@ -66,7 +66,7 @@ func TestParseApi_RouteEVENTS(t *testing.T) {
 			}
 			assert.True(t, apiSpec != nil, "expected to find an Api spec")
 			assert.Equal(t, "TestApi", apiSpec.Name.Value)
-			assert.Equal(t, ast.EVENTS, apiSpec.Style)
+			assert.Equal(t, ast.StyleEvents, apiSpec.Style)
 
 			assert.Equal(t, 1, len(apiSpec.Routes), "expected exactly one route")
 
@@ -105,20 +105,20 @@ func TestParseApi_EVENTS(t *testing.T) {
 	}
 	assert.True(t, apiSpec != nil, "expected to find an Api spec")
 	assert.Equal(t, "TestApi", apiSpec.Name.Value)
-	assert.Equal(t, ast.EVENTS, apiSpec.Style)
+	assert.Equal(t, ast.StyleEvents, apiSpec.Style)
 	assert.Equal(t, 2, len(apiSpec.Routes), "expected exactly two routes")
 
 	pubRoute, ok := apiSpec.Routes[0].(*ast.EventRoute)
 	assert.True(t, ok, "expected first route to be an EventRoute")
 	assert.Equal(t, "UserCreated", pubRoute.Name.Value)
-	assert.Equal(t, ast.PUBLISH, pubRoute.Direction)
+	assert.Equal(t, ast.EventPublish, pubRoute.Direction)
 	assert.Equal(t, "UserCreatedEvent", pubRoute.Event.Base.String())
 	assert.Equal(t, 0, len(pubRoute.Decorators))
 
 	subRoute, ok := apiSpec.Routes[1].(*ast.EventRoute)
 	assert.True(t, ok, "expected second route to be an EventRoute")
 	assert.Equal(t, "UserDeleted", subRoute.Name.Value)
-	assert.Equal(t, ast.SUBSCRIBE, subRoute.Direction)
+	assert.Equal(t, ast.EventSubscribe, subRoute.Direction)
 	assert.Equal(t, "UserDeletedEvent", subRoute.Event.Base.String())
 	assert.Equal(t, 2, len(subRoute.Decorators))
 	assert.Equal(t, "query", subRoute.Decorators[0].Name)

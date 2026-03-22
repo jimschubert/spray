@@ -8,16 +8,16 @@ import (
 type ApiStyle int
 
 const (
-	REST ApiStyle = iota
-	RPC
-	EVENTS
+	StyleREST ApiStyle = iota
+	StyleRPC
+	StyleEvents
 )
 
 type EventDirection int
 
 const (
-	PUBLISH EventDirection = iota
-	SUBSCRIBE
+	EventPublish EventDirection = iota
+	EventSubscribe
 )
 
 // Node is the base interface for all AST nodes.
@@ -414,7 +414,7 @@ func (r *RestRoute) Position() Position {
 }
 
 func (r *RestRoute) Style() ApiStyle {
-	return REST
+	return StyleREST
 }
 
 type PathSegment struct {
@@ -443,7 +443,7 @@ func (r *RpcRoute) Position() Position {
 }
 
 func (r *RpcRoute) Style() ApiStyle {
-	return RPC
+	return StyleRPC
 }
 
 type EventRoute struct {
@@ -460,7 +460,7 @@ func (e *EventRoute) Position() Position {
 }
 
 func (e *EventRoute) Style() ApiStyle {
-	return EVENTS
+	return StyleEvents
 }
 
 func (e *Enum) specNode()      {}

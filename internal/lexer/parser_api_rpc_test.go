@@ -174,7 +174,7 @@ func TestParseApi_RPC(t *testing.T) {
 			name:        "empty RPC api is allowed",
 			input:       "api MyRpcApi @style(rpc) { }",
 			expectName:  "MyRpcApi",
-			expectStyle: ast.RPC,
+			expectStyle: ast.StyleRPC,
 			routeCount:  0,
 			wantErr:     false,
 		},
@@ -186,7 +186,7 @@ func TestParseApi_RPC(t *testing.T) {
   rpc stream Chat(ChatInput) -> ChatMessage
 }`,
 			expectName:  "FeedService",
-			expectStyle: ast.RPC,
+			expectStyle: ast.StyleRPC,
 			routeCount:  3,
 			wantErr:     false,
 		},
@@ -199,7 +199,7 @@ func TestParseApi_RPC(t *testing.T) {
   rpc CreatePost(CreatePostInput) -> Post
 }`,
 			expectName:       "MyRpcApi",
-			expectStyle:      ast.RPC,
+			expectStyle:      ast.StyleRPC,
 			expectDecorators: []string{"style", "version"},
 			expectDirectives: []string{"basePath"},
 			routeCount:       2,
@@ -213,7 +213,7 @@ func TestParseApi_RPC(t *testing.T) {
   rpc ProcessData(ProcessInput) -> Result
 }`,
 			expectName:  "MixedService",
-			expectStyle: ast.RPC,
+			expectStyle: ast.StyleRPC,
 			routeCount:  3,
 			wantErr:     false,
 		},

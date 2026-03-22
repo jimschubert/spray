@@ -893,9 +893,9 @@ func (p *parserState) parseEventRoute() (*ast.EventRoute, error) {
 	var direction ast.EventDirection
 	switch kw.val {
 	case "publish":
-		direction = ast.PUBLISH
+		direction = ast.EventPublish
 	case "subscribe":
-		direction = ast.SUBSCRIBE
+		direction = ast.EventSubscribe
 	}
 	eventRoute := &ast.EventRoute{
 		Pos:       p.itemPos(kw),
@@ -983,11 +983,11 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 			decorator.Args.All()(func(s string, node ast.TypeNode) bool {
 				switch s {
 				case "rest":
-					api.Style = ast.REST
+					api.Style = ast.StyleREST
 				case "rpc":
-					api.Style = ast.RPC
+					api.Style = ast.StyleRPC
 				case "events":
-					api.Style = ast.EVENTS
+					api.Style = ast.StyleEvents
 				default:
 					err = &ParsingError{
 						Pos:     decorator.Position(),
@@ -1005,7 +1005,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 	}
 
 	if len(api.ApiDecorators) == 0 {
-		api.Style = ast.REST
+		api.Style = ast.StyleREST
 	}
 
 	for p.peek().typ == itemAt {
@@ -1020,7 +1020,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 	}
 
 	switch api.Style {
-	case ast.REST:
+	case ast.StyleREST:
 		for {
 			next := p.peek()
 			if next.typ == itemRightBrace {
@@ -1037,7 +1037,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 			}
 			api.Routes = append(api.Routes, route)
 		}
-	case ast.RPC:
+	case ast.StyleRPC:
 		for {
 			next := p.peek()
 			if next.typ == itemRightBrace {
@@ -1054,7 +1054,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 			}
 			api.Routes = append(api.Routes, route)
 		}
-	case ast.EVENTS:
+	case ast.StyleEvents:
 		for {
 			next := p.peek()
 			if next.typ == itemRightBrace {

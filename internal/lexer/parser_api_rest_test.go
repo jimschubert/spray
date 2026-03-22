@@ -104,7 +104,7 @@ func TestParseApi_RouteREST(t *testing.T) {
 			}
 			assert.True(t, apiSpec != nil, "expected to find an Api spec")
 			assert.Equal(t, "TestApi", apiSpec.Name.Value)
-			assert.Equal(t, ast.REST, apiSpec.Style)
+			assert.Equal(t, ast.StyleREST, apiSpec.Style)
 
 			if len(apiSpec.Routes) != 1 {
 				t.Fatalf("expected 1 route, got %d", len(apiSpec.Routes))
@@ -155,7 +155,7 @@ func TestParseApi_REST(t *testing.T) {
   POST /users -> User
 }`,
 			expectName:       "MyApi",
-			expectStyle:      ast.REST,
+			expectStyle:      ast.StyleREST,
 			expectDecorators: []string{"style", "version"},
 			expectDirectives: []string{"auth", "basePath"},
 			endpointCount:    2,
