@@ -359,6 +359,7 @@ func (p *parserState) parseIdent(context string) (*ast.StringLiteral, error) {
 	}, nil
 }
 
+//nolint:unused
 func (p *parserState) parseStringLiteral() (*ast.StringLiteral, error) {
 	it, err := p.expect(itemString)
 	if err != nil {
@@ -612,9 +613,8 @@ func (p *parserState) parseField() (*ast.Field, error) {
 	}
 
 	for {
-		next := p.peek()
-		switch {
-		case next.typ == itemAt:
+		switch p.peek().typ {
+		case itemAt:
 			// @raw is not a field decorator — stop here so the model/input parser
 			// can collect it as an extension block.
 			if p.peekIsRawBlock() {
@@ -626,7 +626,7 @@ func (p *parserState) parseField() (*ast.Field, error) {
 			}
 			field.Decorators = append(field.Decorators, *decorator)
 			continue
-		case next.typ == itemComment:
+		case itemComment:
 			comment := p.next()
 			field.LineComment = &ast.Comment{
 				Pos:  itemPos(comment),

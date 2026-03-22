@@ -50,6 +50,7 @@ func (i item) String() string {
 // itemType is the set of lexical tokens
 type itemType int
 
+//nolint:unused
 const (
 	// special tokens
 	itemError itemType = iota

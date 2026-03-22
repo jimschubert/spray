@@ -359,11 +359,6 @@ func (l *lexer) nextItem() item {
 	return item{typ: itemEOF}
 }
 
-// ignore skips over the pending input before this point, discarding it.
-func (l *lexer) ignore() {
-	l.start = l.pos
-}
-
 // backup steps back one rune and adjusts line count if needed.
 // Can be called only once per call of next.
 func (l *lexer) backup() {
@@ -381,22 +376,6 @@ func (l *lexer) peek() rune {
 	r := l.next()
 	l.backup()
 	return r
-}
-
-// accept consumes the next rune if it's from the valid set.
-func (l *lexer) accept(valid string) bool {
-	if strings.IndexRune(valid, l.next()) >= 0 {
-		return true
-	}
-	l.backup()
-	return false
-}
-
-// acceptRun consumes a run of runes from the valid set.
-func (l *lexer) acceptRun(valid string) {
-	for strings.IndexRune(valid, l.next()) >= 0 {
-	}
-	l.backup()
 }
 
 // errorf returns an error token and terminates the scan by passing back a
