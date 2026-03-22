@@ -149,6 +149,26 @@ func (cg *CommentGroup) IsEmpty() bool {
 	return len(cg.Comments) == 0
 }
 
+type RawPair struct {
+	Pos   Position
+	Key   StringLiteral
+	Value TypeNode // StringLiteral, IntLiteral, FloatLiteral, or nil for null
+}
+
+func (r *RawPair) Position() Position {
+	return r.Pos
+}
+
+type RawBlock struct {
+	Pos    Position
+	Target StringLiteral
+	Pairs  []RawPair
+}
+
+func (r *RawBlock) Position() Position {
+	return r.Pos
+}
+
 // Namespace represents a namespace declaration, which has a qualified identifier and comments.
 type Namespace struct {
 	Pos         Position
@@ -346,6 +366,7 @@ type Model struct {
 	Name          StringLiteral
 	GenericParams []StringLiteral
 	Fields        []Field
+	Extensions    []RawBlock
 	HeadComment   *CommentGroup
 }
 
@@ -371,6 +392,7 @@ type Api struct {
 	ApiDecorators []Decorator // before '{', control features within api block
 	ApiDirectives []Decorator
 	Routes        []Route
+	Extensions    []RawBlock
 	HeadComment   *CommentGroup
 }
 

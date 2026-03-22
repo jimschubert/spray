@@ -2,6 +2,7 @@ package lexer
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jimschubert/spray/internal/ast"
@@ -146,6 +147,24 @@ func (p *parserState) collectComments() []*ast.Comment {
 // itemPos gets an ast.Position from an item
 func itemPos(i item) ast.Position {
 	return ast.Position{Line: i.line, Col: int(i.pos)}
+}
+
+// peekIsRawBlock determines if we see '@raw' and is special logic so decorators don't fully consume @raw
+func (p *parserState) peekIsRawBlock() bool {
+	it := p.peek() // skips newlines
+	if it.typ != itemAt {
+		return false
+	}
+	// peek() stored '@' in p.peeked, and now p.l.index points to next item in items.
+	// this finds the next non-newline which is a 'raw' identifier (a "lookahead" scan).
+	// probably should error on any newline in between, but could deal with that later if its an issue.
+	for i := p.l.index; i < len(p.l.items); i++ {
+		next := p.l.items[i]
+		if next.typ != itemNewline {
+			return next.typ == itemIdent && next.val == "raw"
+		}
+	}
+	return false
 }
 
 // isKeyword checks if an itemType is a keyword token
@@ -561,6 +580,11 @@ func (p *parserState) parseGenericParams() ([]ast.StringLiteral, error) {
 func (p *parserState) parseField() (*ast.Field, error) {
 	// collect comments to head comments. multiple leading comment groups will be a parser error
 	comments := p.collectComments()
+	if p.peek().typ == itemAt {
+		// in case of @raw, defer to caller
+		return nil, nil
+	}
+
 	if p.peek().typ != itemIdent {
 		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected identifier at start of field declaration"}
 	}
@@ -592,6 +616,11 @@ func (p *parserState) parseField() (*ast.Field, error) {
 		next := p.peek()
 		switch {
 		case next.typ == itemAt:
+			// @raw is not a field decorator — stop here so the model/input parser
+			// can collect it as an extension block.
+			if p.peekIsRawBlock() {
+				return field, nil
+			}
 			decorator, err := p.parseDecorator()
 			if err != nil {
 				return nil, err
@@ -677,10 +706,10 @@ func (p *parserState) parseModel(group *ast.CommentGroup) (*ast.Model, error) {
 		return nil, err
 	}
 
+	// first, parse fields stopping at '}' or '@raw'
 	for {
 		next := p.peek()
-		if next.typ == itemRightBrace {
-			p.next() // consume right brace
+		if next.typ == itemRightBrace || next.typ == itemAt {
 			break
 		}
 		field, err := p.parseField()
@@ -688,6 +717,19 @@ func (p *parserState) parseModel(group *ast.CommentGroup) (*ast.Model, error) {
 			return nil, err
 		}
 		model.Fields = append(model.Fields, *field)
+	}
+
+	for p.peek().typ == itemAt {
+		raw, err := p.parseRaw()
+		if err != nil {
+			return nil, err
+		}
+		model.Extensions = append(model.Extensions, *raw)
+	}
+
+	_, err = p.expect(itemRightBrace)
+	if err != nil {
+		return nil, err
 	}
 
 	return model, nil
@@ -765,6 +807,9 @@ func (p *parserState) parseRestRoute() (*ast.RestRoute, error) {
 
 	// parse optional decorators on route
 	for p.peek().typ == itemAt {
+		if p.peekIsRawBlock() {
+			break
+		}
 		decorator, err := p.parseDecorator()
 		if err != nil {
 			return nil, err
@@ -826,6 +871,9 @@ func (p *parserState) parseRpcRoute() (*ast.RpcRoute, error) {
 	route.Return = *returnType
 
 	for p.peek().typ == itemAt {
+		if p.peekIsRawBlock() {
+			break
+		}
 		decorator, err := p.parseDecorator()
 		if err != nil {
 			return nil, err
@@ -882,6 +930,9 @@ func (p *parserState) parseEventRoute() (*ast.EventRoute, error) {
 	eventRoute.Event = *eventType
 
 	for p.peek().typ == itemAt {
+		if p.peekIsRawBlock() {
+			break
+		}
 		decorator, err := p.parseDecorator()
 		if err != nil {
 			return nil, err
@@ -964,6 +1015,9 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 	}
 
 	for p.peek().typ == itemAt {
+		if p.peekIsRawBlock() {
+			break
+		}
 		directive, err := p.parseDecorator()
 		if err != nil {
 			return nil, err
@@ -978,6 +1032,11 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 			if next.typ == itemRightBrace {
 				break
 			}
+			if next.typ == itemAt {
+				if p.peekIsRawBlock() {
+					break
+				}
+			}
 			route, err := p.parseRestRoute()
 			if err != nil {
 				return nil, err
@@ -990,6 +1049,11 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 			if next.typ == itemRightBrace {
 				break
 			}
+			if next.typ == itemAt {
+				if p.peekIsRawBlock() {
+					break
+				}
+			}
 			route, err := p.parseRpcRoute()
 			if err != nil {
 				return nil, err
@@ -1001,6 +1065,11 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 			next := p.peek()
 			if next.typ == itemRightBrace {
 				break
+			}
+			if next.typ == itemAt {
+				if p.peekIsRawBlock() {
+					break
+				}
 			}
 			route, err := p.parseEventRoute()
 			if err != nil {
@@ -1015,12 +1084,123 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 		}
 	}
 
+	// @raw blocks (come after routes)
+	for p.peek().typ == itemAt {
+		raw, err := p.parseRaw()
+		if err != nil {
+			return nil, err
+		}
+		api.Extensions = append(api.Extensions, *raw)
+	}
+
 	_, err = p.expect(itemRightBrace) // consume '}'
 	if err != nil {
 		return nil, err
 	}
 
 	return api, nil
+}
+
+func (p *parserState) parseRaw() (*ast.RawBlock, error) {
+	kw, err := p.expect(itemAt)
+	if err != nil {
+		return nil, err
+	}
+
+	rawIdent := p.peek()
+	if rawIdent.typ != itemIdent || rawIdent.val != "raw" {
+		return nil, &ParsingError{Pos: itemPos(rawIdent), Message: "expected 'raw' after '@'"}
+	}
+	p.next() // consume "raw"
+
+	_, err = p.expect(itemLeftParen)
+	if err != nil {
+		return nil, err
+	}
+
+	target, err := p.expect(itemIdent)
+	if err != nil {
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected target name in @raw(target)"}
+	}
+
+	_, err = p.expect(itemRightParen)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.expect(itemLeftBrace)
+	if err != nil {
+		return nil, err
+	}
+
+	block := &ast.RawBlock{
+		Pos:    itemPos(kw),
+		Target: itemStringLiteral(target),
+	}
+
+	for {
+		next := p.peek()
+		if next.typ == itemRightBrace {
+			p.next() // consume '}'
+			break
+		}
+
+		pair, err := p.parseRawPair()
+		if err != nil {
+			return nil, err
+		}
+		block.Pairs = append(block.Pairs, *pair)
+	}
+
+	return block, nil
+}
+
+func (p *parserState) parseRawPair() (*ast.RawPair, error) {
+	key, err := p.expect(itemString)
+	if err != nil {
+		return nil, &ParsingError{Pos: itemPos(p.peek()), Message: "expected quoted string key in @raw block"}
+	}
+
+	_, err = p.expect(itemColon)
+	if err != nil {
+		return nil, err
+	}
+
+	pair := &ast.RawPair{
+		Pos: itemPos(key),
+		Key: itemStringLiteral(key),
+	}
+
+	next := p.peek()
+	switch next.typ {
+	case itemString:
+		p.next()
+		pair.Value = &ast.StringLiteral{Pos: itemPos(next), Value: next.val}
+	case itemInt:
+		p.next()
+		val, _ := strconv.Atoi(next.val)
+		pair.Value = &ast.IntLiteral{Pos: itemPos(next), Value: val}
+	case itemFloat:
+		p.next()
+		val, _ := strconv.ParseFloat(next.val, 64)
+		pair.Value = &ast.FloatLiteral{Pos: itemPos(next), Value: val}
+	case itemKeywordTrue:
+		p.next()
+		pair.Value = &ast.StringLiteral{Pos: itemPos(next), Value: "true"}
+	case itemKeywordFalse:
+		p.next()
+		pair.Value = &ast.StringLiteral{Pos: itemPos(next), Value: "false"}
+	case itemKeywordNull:
+		p.next()
+		pair.Value = nil
+	default:
+		return nil, &ParsingError{
+			Pos:     itemPos(next),
+			Message: fmt.Sprintf("expected string, integer, float, true, false, or null as @raw value, got %q", next.val),
+		}
+	}
+
+	return pair, nil
 }
 
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.
