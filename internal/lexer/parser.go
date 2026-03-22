@@ -479,47 +479,57 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 
 	if p.peek().typ == itemLeftParen {
 		p.next() // consume '('
+		for {
+			// check for special literal values first
+			if special, ok := p.peekAny(itemKeywordNow, itemString, itemInt, itemFloat); ok {
+				p.next() // consume keyword or literal
+				decorator.Args.Set(special.val, nil, p.itemPos(special))
+			} else if p.peek().typ == itemIdent || isKeyword(p.peek().typ) {
+				// Accept identifiers or any keyword as decorator argument values
+				// Keywords like 'rest', 'bearer', 'events' can be used as values in decorators
+				keyOrValue := p.next() // consume identifier or keyword
 
-		// check for special literal values first
-		if special, ok := p.peekAny(itemKeywordNow, itemString, itemInt, itemFloat); ok {
-			p.next() // consume keyword or literal
-			decorator.Args.Set(special.val, nil, p.itemPos(special))
-		} else if p.peek().typ == itemIdent || isKeyword(p.peek().typ) {
-			// Accept identifiers or any keyword as decorator argument values
-			// Keywords like 'rest', 'bearer', 'events' can be used as values in decorators
-			keyOrValue := p.next() // consume identifier or keyword
+				// Check if this is `key: value` syntax
+				if p.peek().typ == itemColon {
+					p.next() // consume ':'
 
-			// Check if this is `key: value` syntax
-			if p.peek().typ == itemColon {
-				p.next() // consume ':'
-
-				// Value after colon can be identifier or keyword
-				if p.peek().typ == itemIdent || isKeyword(p.peek().typ) {
-					valueToken := p.next() // consume value
+					// Value after colon can be identifier or keyword
+					if p.peek().typ == itemIdent || isKeyword(p.peek().typ) {
+						valueToken := p.next() // consume value
+						typeExpr := &ast.TypeExpression{
+							Pos: p.itemPos(valueToken),
+							Base: ast.QualifiedIdent{
+								Pos:   p.itemPos(valueToken),
+								Parts: []string{valueToken.val},
+							},
+						}
+						decorator.Args.Set(keyOrValue.val, typeExpr, p.itemPos(keyOrValue))
+					} else {
+						return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier or keyword after ':' in decorator argument"}
+					}
+				} else {
+					// Simple value like @style(rest) or @default(member)
 					typeExpr := &ast.TypeExpression{
-						Pos: p.itemPos(valueToken),
+						Pos: p.itemPos(keyOrValue),
 						Base: ast.QualifiedIdent{
-							Pos:   p.itemPos(valueToken),
-							Parts: []string{valueToken.val},
+							Pos:   p.itemPos(keyOrValue),
+							Parts: []string{keyOrValue.val},
 						},
 					}
 					decorator.Args.Set(keyOrValue.val, typeExpr, p.itemPos(keyOrValue))
-				} else {
-					return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier or keyword after ':' in decorator argument"}
 				}
 			} else {
-				// Simple value like @style(rest) or @default(member)
-				typeExpr := &ast.TypeExpression{
-					Pos: p.itemPos(keyOrValue),
-					Base: ast.QualifiedIdent{
-						Pos:   p.itemPos(keyOrValue),
-						Parts: []string{keyOrValue.val},
-					},
-				}
-				decorator.Args.Set(keyOrValue.val, typeExpr, p.itemPos(keyOrValue))
+				return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier, keyword, string literal, or special value as decorator argument"}
 			}
-		} else {
-			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier, keyword, string literal, or special value as decorator argument"}
+
+			if p.peek().typ == itemComma {
+				p.next() // consume comma, continue loop
+				continue
+			} else if p.peek().typ == itemRightParen {
+				break
+			} else {
+				return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or ')' in decorator argument list"}
+			}
 		}
 
 		if _, err = p.expect(itemRightParen); err != nil {

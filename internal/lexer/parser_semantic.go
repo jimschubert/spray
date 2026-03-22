@@ -85,6 +85,44 @@ func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
 					))
 				}
 			}
+
+			for _, route := range s.Routes {
+				var decorators []ast.Decorator
+				switch r := route.(type) {
+				case *ast.RestRoute:
+					decorators = r.Decorators
+				case *ast.RpcRoute:
+					decorators = r.Decorators
+				case *ast.EventRoute:
+					decorators = r.Decorators
+				}
+
+				for i := range decorators {
+					dec := &decorators[i]
+					if !isValidRouteDecorator(dec.Name) {
+						err = errors.Join(err, fmt.Errorf(
+							"invalid route decorator %q [line: %d, col: %d] (routes support: @body, @query, @errors, @summary, @tag, @version, @deprecated, @raw)",
+							dec.Name,
+							dec.Position().Line,
+							dec.Position().Col,
+						))
+					}
+
+					// only @errors allows multiple arguments (excluding @raw)
+					argCount := 0
+					for range dec.Args.Keys() {
+						argCount++
+					}
+					if argCount > 1 && dec.Name != "errors" && dec.Name != "raw" {
+						err = errors.Join(err, fmt.Errorf(
+							"decorator %q does not support multiple arguments [line: %d, col: %d] (only @errors supports comma-separated values)",
+							dec.Name,
+							dec.Position().Line,
+							dec.Position().Col,
+						))
+					}
+				}
+			}
 		}
 	}
 
@@ -116,6 +154,20 @@ func isValidApiLevelDecorator(name string) bool {
 	validDecorators := map[string]bool{
 		"style":   true,
 		"version": true,
+	}
+	return validDecorators[name]
+}
+
+func isValidRouteDecorator(name string) bool {
+	validDecorators := map[string]bool{
+		"body":       true,
+		"query":      true,
+		"errors":     true,
+		"summary":    true,
+		"tag":        true,
+		"version":    true,
+		"deprecated": true,
+		"raw":        true,
 	}
 	return validDecorators[name]
 }

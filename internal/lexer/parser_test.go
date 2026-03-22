@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
@@ -1150,6 +1151,113 @@ model Page<T> {
 
 			if tc.expectedFieldCount > 0 {
 				assert.Equal(t, tc.expectedFieldCount, len(modelSpec.Fields))
+			}
+		})
+	}
+}
+
+func TestParseDecorator_MultipleArgs(t *testing.T) {
+	testCases := []struct {
+		name             string
+		input            string
+		expectArgCount   int
+		expectArgKeys    []string
+		expectError      bool
+		expectErrorMatch string
+	}{
+		{
+			name:           "single error code",
+			input:          `api TestApi @style(rest) { GET / -> User @errors(404) }`,
+			expectArgCount: 1,
+			expectArgKeys:  []string{"404"},
+			expectError:    false,
+		},
+		{
+			name:           "two error codes",
+			input:          `api TestApi @style(rest) { GET / -> User @errors(401, 404) }`,
+			expectArgCount: 2,
+			expectArgKeys:  []string{"401", "404"},
+			expectError:    false,
+		},
+		{
+			name:           "three error codes",
+			input:          `api TestApi @style(rest) { GET / -> User @errors(400, 401, 404) }`,
+			expectArgCount: 3,
+			expectArgKeys:  []string{"400", "401", "404"},
+			expectError:    false,
+		},
+		{
+			name:           "error codes with spaces",
+			input:          `api TestApi @style(rest) { GET / -> User @errors(400 , 401 , 404) }`,
+			expectArgCount: 3,
+			expectArgKeys:  []string{"400", "401", "404"},
+			expectError:    false,
+		},
+		{
+			name:             "single error code with trailing comma fails",
+			input:            `api TestApi @style(rest) { GET / -> User @errors(404,) }`,
+			expectArgCount:   0,
+			expectError:      true,
+			expectErrorMatch: "expected identifier, keyword, string literal, or special value",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p, err := New()
+			assert.NoError(t, err)
+
+			stencil, err := p.Parse(tc.input)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.expectErrorMatch != "" {
+					errMsg := err.Error()
+					assert.True(t, strings.Contains(errMsg, tc.expectErrorMatch), "expected error to contain %q, got: %s", tc.expectErrorMatch, errMsg)
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+
+			var apiSpec *ast.Api
+			for _, spec := range stencil.Specs {
+				if a, ok := spec.(*ast.Api); ok {
+					apiSpec = a
+					break
+				}
+			}
+			assert.True(t, apiSpec != nil, "expected to find an Api spec")
+
+			assert.Equal(t, 1, len(apiSpec.Routes))
+			route, ok := apiSpec.Routes[0].(*ast.RestRoute)
+			assert.True(t, ok, "expected route to be RestRoute")
+
+			var errorsDecorator *ast.Decorator
+			for i := range route.Decorators {
+				if route.Decorators[i].Name == "errors" {
+					errorsDecorator = &route.Decorators[i]
+					break
+				}
+			}
+			assert.True(t, errorsDecorator != nil, "expected to find @errors decorator")
+
+			argCount := 0
+			for range errorsDecorator.Args.Keys() {
+				argCount++
+			}
+			assert.Equal(t, tc.expectArgCount, argCount)
+
+			for _, expectedKey := range tc.expectArgKeys {
+				found := false
+				for key := range errorsDecorator.Args.Keys() {
+					if key == expectedKey {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "expected to find key %q in decorator args", expectedKey)
 			}
 		})
 	}

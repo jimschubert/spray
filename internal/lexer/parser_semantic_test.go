@@ -357,3 +357,112 @@ model First {
 		})
 	}
 }
+
+func TestParser_semanticValidation_RouteDecoratorMultipleArgs(t *testing.T) {
+	tests := []struct {
+		name                string
+		input               string
+		wantErr             bool
+		expectErrorIncludes []string
+	}{
+		{
+			name: "@errors with multiple codes is allowed",
+			input: `api TestApi @style(rest) {
+  GET / -> User @errors(400, 401, 404)
+}`,
+			wantErr: false,
+		},
+		{
+			name: "@errors with single code is allowed",
+			input: `api TestApi @style(rest) {
+  GET / -> User @errors(404)
+}`,
+			wantErr: false,
+		},
+		{
+			name: "@body with multiple arguments is not allowed",
+			input: `api TestApi @style(rest) {
+  POST / -> User @body(CreateUserInput, OtherInput)
+}`,
+			wantErr: true,
+			expectErrorIncludes: []string{
+				"decorator \"body\" does not support multiple arguments",
+				"only @errors supports comma-separated values",
+			},
+		},
+		{
+			name: "@query with multiple arguments is not allowed",
+			input: `api TestApi @style(rest) {
+  GET / -> User @query(PaginationInput, FilterInput)
+}`,
+			wantErr: true,
+			expectErrorIncludes: []string{
+				"decorator \"query\" does not support multiple arguments",
+				"only @errors supports comma-separated values",
+			},
+		},
+		{
+			name: "@summary with multiple arguments is not allowed",
+			input: `api TestApi @style(rest) {
+  GET / -> User @summary("Short description", "Long description")
+}`,
+			wantErr: true,
+			expectErrorIncludes: []string{
+				"decorator \"summary\" does not support multiple arguments",
+				"only @errors supports comma-separated values",
+			},
+		},
+		{
+			name: "@errors, @query, and other decorators mixed",
+			input: `api TestApi @style(rest) {
+  POST /users -> User
+    @body(CreateUserInput)
+    @errors(400, 409)
+    @summary("Create user")
+}`,
+			wantErr: false,
+		},
+		{
+			name: "@deprecated with multiple arguments is not allowed",
+			input: `api TestApi @style(rest) {
+  GET /old -> User @deprecated("Use /new instead", "Scheduled removal: 2027-01-01")
+}`,
+			wantErr: true,
+			expectErrorIncludes: []string{
+				"decorator \"deprecated\" does not support multiple arguments",
+				"only @errors supports comma-separated values",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := New()
+			if err != nil {
+				t.Fatalf("failed to create parser: %v", err)
+			}
+
+			_, err = p.Parse(tt.input)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("expected error but got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("expected no error but got: %v", err)
+				return
+			}
+
+			if tt.wantErr {
+				errMsg := err.Error()
+				t.Logf("%s error (expected):\n%s", tt.name, errMsg)
+				for _, substr := range tt.expectErrorIncludes {
+					if !strings.Contains(errMsg, substr) {
+						t.Errorf("expected error to include %q, got: %s", substr, errMsg)
+					}
+				}
+			}
+		})
+	}
+}
