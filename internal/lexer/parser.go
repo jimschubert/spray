@@ -2,6 +2,7 @@ package lexer
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,10 +53,8 @@ func (p *parserState) next() item {
 // peekAny checks if the next token is any of the provided types, returning the token and true if it is.
 func (p *parserState) peekAny(types ...itemType) (item, bool) {
 	it := p.peek()
-	for _, typ := range types {
-		if it.typ == typ {
-			return it, true
-		}
+	if slices.Contains(types, it.typ) {
+		return it, true
 	}
 	return it, false
 }

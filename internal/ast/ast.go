@@ -61,14 +61,14 @@ func (q *QualifiedIdent) Position() Position {
 }
 
 func (q *QualifiedIdent) String() string {
-	result := ""
+	var result strings.Builder
 	for i, part := range q.Parts {
 		if i > 0 {
-			result += "."
+			result.WriteString(".")
 		}
-		result += part
+		result.WriteString(part)
 	}
-	return result
+	return result.String()
 }
 
 // StringLiteral represents a string literal in the source file. (i.e. IDENT)

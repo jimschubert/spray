@@ -50,7 +50,7 @@ func BenchmarkOrderedTypeMap_SetAndGet(b *testing.B) {
 
 func BenchmarkOrderedTypeMap_AllWithPositions(b *testing.B) {
 	m := &OrderedTypeMap{}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		m.Set("key", &StringLiteral{Value: "value"}, Position{Line: i, Col: 1})
 	}
 
