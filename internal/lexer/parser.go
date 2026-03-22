@@ -6,18 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jimschubert/spray/internal/ast"
+	"github.com/jimschubert/spray/ast"
+	"github.com/jimschubert/spray/errors"
 )
-
-// ParsingError represents an error encountered during parsing.
-type ParsingError struct {
-	Pos     ast.Position
-	Message string
-}
-
-func (e *ParsingError) Error() string {
-	return fmt.Sprintf("parsing error at %d:%d: %s", e.Pos.Line, e.Pos.Col, e.Message)
-}
 
 // Parser holds the state of the parserState.
 type Parser struct{}
@@ -100,7 +91,7 @@ func (p *parserState) nextRaw() item {
 func (p *parserState) expect(typ itemType) (item, error) {
 	it := p.next()
 	if it.typ != typ {
-		return it, &ParsingError{
+		return it, &errors.ParsingError{
 			Pos:     p.itemPos(it),
 			Message: fmt.Sprintf("expected a %q but got a %q", symbolsDescriptions[typ], symbolsDescriptions[it.typ]),
 		}
@@ -218,7 +209,7 @@ func (p *parserState) parseImport(commentGroup *ast.CommentGroup) (*ast.Import, 
 
 	// must start with a string, not dot or other
 	if p.peek().typ != itemIdent {
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier after 'import'"}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier after 'import'"}
 	}
 
 	qi, err := p.parseQualifiedIdent("import")
@@ -235,7 +226,7 @@ func (p *parserState) parseImport(commentGroup *ast.CommentGroup) (*ast.Import, 
 	for {
 		if p.peek().typ != itemIdent {
 			// don't allow empty grouping or undefined after comma; the trailing brace will be handled via peek later on identifier
-			return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier in import name list"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier in import name list"}
 		}
 
 		imp.Names = append(imp.Names, p.itemStringLiteral(p.next())) // consume name
@@ -247,7 +238,7 @@ func (p *parserState) parseImport(commentGroup *ast.CommentGroup) (*ast.Import, 
 			// don't consume yet, just exit loop
 			break
 		} else {
-			return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '}' in import name list"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '}' in import name list"}
 		}
 	}
 
@@ -269,7 +260,7 @@ func (p *parserState) parseImport(commentGroup *ast.CommentGroup) (*ast.Import, 
 
 func (p *parserState) parseQualifiedIdent(context string) (*ast.QualifiedIdent, error) {
 	if p.peek().typ != itemIdent {
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: fmt.Sprintf("expected identifier after %q", context)}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: fmt.Sprintf("expected identifier after %q", context)}
 	}
 	qi := &ast.QualifiedIdent{
 		Pos:   p.itemPos(p.peek()),
@@ -279,7 +270,7 @@ func (p *parserState) parseQualifiedIdent(context string) (*ast.QualifiedIdent, 
 	for p.peek().typ == itemDot {
 		p.next() // consume dot
 		if p.peek().typ != itemIdent {
-			return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier after '.'"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier after '.'"}
 		}
 		qi.Parts = append(qi.Parts, p.next().val)
 	}
@@ -323,14 +314,14 @@ func (p *parserState) parseEnum(group *ast.CommentGroup) (*ast.Enum, error) {
 			p.next() // consume comma, continue to next element
 			// e.g ,}
 			if p.peek().typ == itemRightBrace {
-				return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "trailing comma not allowed in enum element list"}
+				return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "trailing comma not allowed in enum element list"}
 			}
 			continue
 		} else if p.peek().typ == itemRightBrace {
 			// don't consume yet, will be consumed by expect() below
 			break
 		} else {
-			return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '}' in enum element list"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '}' in enum element list"}
 		}
 	}
 
@@ -345,7 +336,7 @@ func (p *parserState) parseEnum(group *ast.CommentGroup) (*ast.Enum, error) {
 func (p *parserState) parseIdent(context string) (*ast.StringLiteral, error) {
 	if p.peek().typ != itemIdent {
 		// don't allow empty grouping or undefined after comma; the trailing brace will be handled via peek later on identifier
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: fmt.Sprintf("expected identifier after %q", context)}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: fmt.Sprintf("expected identifier after %q", context)}
 	}
 	v := p.next() // consume ident
 	return &ast.StringLiteral{
@@ -450,11 +441,11 @@ func (p *parserState) parseTypeExpression() (*ast.TypeExpression, error) {
 			} else if p.peek().typ == itemRightAngle {
 				p.next() // consume '>'
 				if len(args) == 0 {
-					return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "generic type argument list cannot be empty"}
+					return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "generic type argument list cannot be empty"}
 				}
 				break
 			} else {
-				return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '>' in generic type argument list"}
+				return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '>' in generic type argument list"}
 			}
 		}
 	}
@@ -483,7 +474,7 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 		p.next() // consume identifier
 		decorator.Name = it.val
 	} else {
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected decorator name after '@'"}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected decorator name after '@'"}
 	}
 
 	if p.peek().typ == itemLeftParen {
@@ -514,7 +505,7 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 					}
 					decorator.Args.Set(keyOrValue.val, typeExpr, p.itemPos(keyOrValue))
 				} else {
-					return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier or keyword after ':' in decorator argument"}
+					return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier or keyword after ':' in decorator argument"}
 				}
 			} else {
 				// Simple value like @style(rest) or @default(member)
@@ -528,7 +519,7 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 				decorator.Args.Set(keyOrValue.val, typeExpr, p.itemPos(keyOrValue))
 			}
 		} else {
-			return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier, keyword, string literal, or special value as decorator argument"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier, keyword, string literal, or special value as decorator argument"}
 		}
 
 		if _, err = p.expect(itemRightParen); err != nil {
@@ -549,7 +540,7 @@ func (p *parserState) parseGenericParams() ([]ast.StringLiteral, error) {
 	var params []ast.StringLiteral
 	for {
 		if p.peek().typ != itemIdent {
-			return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier in generic parameter list"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier in generic parameter list"}
 		}
 
 		param := p.next() // consume parameter name
@@ -561,11 +552,11 @@ func (p *parserState) parseGenericParams() ([]ast.StringLiteral, error) {
 		} else if p.peek().typ == itemRightAngle {
 			p.next() // consume '>'
 			if len(params) == 0 {
-				return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "generic parameter list cannot be empty"}
+				return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "generic parameter list cannot be empty"}
 			}
 			break
 		} else {
-			return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '>' in generic parameter list"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected ',' or '>' in generic parameter list"}
 		}
 	}
 
@@ -581,7 +572,7 @@ func (p *parserState) parseField() (*ast.Field, error) {
 	}
 
 	if p.peek().typ != itemIdent {
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier at start of field declaration"}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier at start of field declaration"}
 	}
 	name := p.next() // consume field name
 
@@ -736,7 +727,7 @@ func (p *parserState) parseRestRoute() (*ast.RestRoute, error) {
 		kw = i
 		p.next() // consume HTTP method keyword
 	} else {
-		return nil, &ParsingError{
+		return nil, &errors.ParsingError{
 			Pos:     p.itemPos(p.peek()),
 			Message: fmt.Sprintf("invalid HTTP method '%s' for REST route", p.peek().val),
 		}
@@ -776,7 +767,7 @@ func (p *parserState) parseRestRoute() (*ast.RestRoute, error) {
 				pathSegment.IsParam = true
 				p.next() // consume ':'
 				if p.peek().typ != itemIdent {
-					return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier after ':' in path parameter"}
+					return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier after ':' in path parameter"}
 				}
 				pathSegment.Value = p.next().val // consume parameter name
 			} else {
@@ -785,12 +776,12 @@ func (p *parserState) parseRestRoute() (*ast.RestRoute, error) {
 
 			route.Path = append(route.Path, pathSegment)
 		} else {
-			return nil, &ParsingError{Pos: p.itemPos(it), Message: "unexpected token in route path; expected identifier, ':', or '->'"}
+			return nil, &errors.ParsingError{Pos: p.itemPos(it), Message: "unexpected token in route path; expected identifier, ':', or '->'"}
 		}
 	}
 
 	if p.peek().typ != itemIdent {
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected return type after '->' in route declaration"}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected return type after '->' in route declaration"}
 	}
 
 	returnType, err := p.parseTypeExpression()
@@ -882,7 +873,7 @@ func (p *parserState) parseEventRoute() (*ast.EventRoute, error) {
 	comments := p.collectComments()
 	kw, ok := p.peekAny(itemKeywordPublish, itemKeywordSubscribe)
 	if !ok {
-		return nil, &ParsingError{
+		return nil, &errors.ParsingError{
 			Pos:     p.itemPos(p.peek()),
 			Message: fmt.Sprintf("expected 'publish' or 'subscribe' for event route declaration, got '%s'", p.peek().val),
 		}
@@ -961,7 +952,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 		}
 
 		if decorator.Name != "version" && decorator.Name != "style" {
-			return nil, &ParsingError{
+			return nil, &errors.ParsingError{
 				Pos:     decorator.Position(),
 				Message: "only 'version' and 'style' decorators are allowed on API before block opening brace",
 			}
@@ -970,7 +961,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 		// if ApiDecorators already contains the decorator, this is an error (no duplicates)
 		for _, d := range api.ApiDecorators {
 			if d.Name == decorator.Name {
-				return nil, &ParsingError{
+				return nil, &errors.ParsingError{
 					Pos:     decorator.Position(),
 					Message: fmt.Sprintf("duplicate decorator '%s' on API", decorator.Name),
 				}
@@ -989,7 +980,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 				case "events":
 					api.Style = ast.StyleEvents
 				default:
-					err = &ParsingError{
+					err = &errors.ParsingError{
 						Pos:     decorator.Position(),
 						Message: fmt.Sprintf("invalid argument '%s' for @style decorator; expected 'rest', 'rpc', or 'events'", s),
 					}
@@ -1072,7 +1063,7 @@ func (p *parserState) parseApi(group *ast.CommentGroup) (*ast.Api, error) {
 			api.Routes = append(api.Routes, route)
 		}
 	default:
-		return nil, &ParsingError{
+		return nil, &errors.ParsingError{
 			Pos:     p.itemPos(p.peek()),
 			Message: fmt.Sprintf("unsupported API style or not yet implemented '%T'", api.Style),
 		}
@@ -1103,7 +1094,7 @@ func (p *parserState) parseRaw() (*ast.RawBlock, error) {
 
 	rawIdent := p.peek()
 	if rawIdent.typ != itemIdent || rawIdent.val != "raw" {
-		return nil, &ParsingError{Pos: p.itemPos(rawIdent), Message: "expected 'raw' after '@'"}
+		return nil, &errors.ParsingError{Pos: p.itemPos(rawIdent), Message: "expected 'raw' after '@'"}
 	}
 	p.next() // consume "raw"
 
@@ -1114,7 +1105,7 @@ func (p *parserState) parseRaw() (*ast.RawBlock, error) {
 
 	target, err := p.expect(itemIdent)
 	if err != nil {
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected target name in @raw(target)"}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected target name in @raw(target)"}
 	}
 
 	_, err = p.expect(itemRightParen)
@@ -1152,7 +1143,7 @@ func (p *parserState) parseRaw() (*ast.RawBlock, error) {
 func (p *parserState) parseRawPair() (*ast.RawPair, error) {
 	key, err := p.expect(itemString)
 	if err != nil {
-		return nil, &ParsingError{Pos: p.itemPos(p.peek()), Message: "expected quoted string key in @raw block"}
+		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected quoted string key in @raw block"}
 	}
 
 	_, err = p.expect(itemColon)
@@ -1188,7 +1179,7 @@ func (p *parserState) parseRawPair() (*ast.RawPair, error) {
 		p.next()
 		pair.Value = nil
 	default:
-		return nil, &ParsingError{
+		return nil, &errors.ParsingError{
 			Pos:     p.itemPos(next),
 			Message: fmt.Sprintf("expected string, integer, float, true, false, or null as @raw value, got %q", next.val),
 		}
@@ -1242,7 +1233,7 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 
 		case itemError:
 			pp.next()
-			return nil, &ParsingError{
+			return nil, &errors.ParsingError{
 				Pos:     pp.itemPos(it),
 				Message: it.val,
 			}
@@ -1257,7 +1248,7 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 
 			if stencil.Namespace != nil {
 				// syntax error, not semantic, since multiple namespaces are not allowed in a single file
-				return nil, &ParsingError{
+				return nil, &errors.ParsingError{
 					Pos:     pp.itemPos(it),
 					Message: "multiple namespace declarations are not allowed",
 				}
@@ -1366,7 +1357,7 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 
 		default:
 			pp.next()
-			return nil, &ParsingError{
+			return nil, &errors.ParsingError{
 				Pos:     pp.itemPos(it),
 				Message: fmt.Sprintf("unexpected token %q", it.val),
 			}

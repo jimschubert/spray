@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jimschubert/spray/internal/ast"
+	"github.com/jimschubert/spray/ast"
 )
 
 // semanticValidation validates the semantics of the AST, returning a composite error if any issues are found (e.g.

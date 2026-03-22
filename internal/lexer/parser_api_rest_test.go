@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
-	"github.com/jimschubert/spray/internal/ast"
+	"github.com/jimschubert/spray/ast"
 )
 
 func TestParseApi_RouteREST(t *testing.T) {
