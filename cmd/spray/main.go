@@ -20,6 +20,7 @@ type kongExitCoderError interface {
 }
 
 var CLI struct {
+	Generate GenerateCmd      `cmd:"" help:"Generate output from .stencil files"`
 	Validate ValidateCmd      `cmd:"" help:"Validate .stencil files without emitting"`
 	Version  kong.VersionFlag `short:"v" help:"Print version information"`
 }

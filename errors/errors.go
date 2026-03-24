@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/jimschubert/spray/ast"
@@ -11,6 +12,16 @@ import (
 type JoinUnwrap interface {
 	error
 	Unwrap() []error
+}
+
+func ForEachJoinError(err JoinUnwrap, f func(error)) {
+	for _, e := range err.Unwrap() {
+		if join, ok := errors.AsType[JoinUnwrap](e); ok {
+			ForEachJoinError(join, f)
+			continue
+		}
+		f(e)
+	}
 }
 
 // ParsingError represents an error encountered during parsing.
