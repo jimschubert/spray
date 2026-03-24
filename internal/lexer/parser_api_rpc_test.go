@@ -99,6 +99,16 @@ func TestParseApi_RouteRPC(t *testing.T) {
 			wantErr:          false,
 		},
 		{
+			name:             "RPC route with void return type",
+			input:            `rpc ping -> void`,
+			expectMethod:     "ping",
+			expectInput:      "",
+			expectReturnType: "void",
+			expectStreaming:  false,
+			expectDecorators: []string{},
+			wantErr:          false,
+		},
+		{
 			name:    "error on missing arrow",
 			input:   `rpc getUser User`,
 			wantErr: true,

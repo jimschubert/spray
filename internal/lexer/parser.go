@@ -400,6 +400,7 @@ func (p *parserState) parseTypeExpression() (*ast.TypeExpression, error) {
 		itemKeywordTimestamp,
 		itemKeywordDate,
 		itemKeywordAny,
+		itemKeywordVoid,
 	); ok {
 		p.next() // consume scalar type
 		aliased = &ast.QualifiedIdent{
@@ -790,8 +791,21 @@ func (p *parserState) parseRestRoute() (*ast.RestRoute, error) {
 		}
 	}
 
-	if p.peek().typ != itemIdent {
-		return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected return type after '->' in route declaration"}
+	// -> [ ident | scalar ]
+	typ, ok := p.peekAny(
+		itemIdent,
+		itemKeywordVoid,
+		itemKeywordString,
+		itemKeywordInt,
+		itemKeywordFloat,
+		itemKeywordBoolean,
+		itemKeywordUUID,
+		itemKeywordTimestamp,
+		itemKeywordDate,
+		itemKeywordAny,
+	)
+	if !ok {
+		return nil, &errors.ParsingError{Pos: p.itemPos(typ), Message: "expected return type after '->' in route declaration"}
 	}
 
 	returnType, err := p.parseTypeExpression()
@@ -1377,5 +1391,5 @@ func (p *Parser) Parse(text string) (*ast.Stencil, error) {
 
 // isKeyword checks if an itemType is a keyword token
 func isKeyword(typ itemType) bool {
-	return typ >= itemKeywordNamespace && typ <= itemKeywordAny
+	return typ >= itemKeywordNamespace && typ <= itemKeywordVoid
 }

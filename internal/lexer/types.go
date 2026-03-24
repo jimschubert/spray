@@ -125,6 +125,7 @@ const (
 	itemKeywordTimestamp
 	itemKeywordDate
 	itemKeywordAny
+	itemKeywordVoid
 
 	// ident/literals
 	itemIdent
@@ -208,6 +209,7 @@ const (
 	keywordTimestamp = "timestamp"
 	keywordDate      = "date"
 	keywordAny       = "any"
+	keywordVoid      = "void"
 
 	newline        = '\n'
 	carriageReturn = '\r'
@@ -283,6 +285,7 @@ var keywords = map[string]itemType{
 	keywordTimestamp: itemKeywordTimestamp,
 	keywordDate:      itemKeywordDate,
 	keywordAny:       itemKeywordAny,
+	keywordVoid:      itemKeywordVoid,
 }
 
 var symbolsDescriptions = func() map[itemType]string {

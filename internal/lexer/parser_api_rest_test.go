@@ -89,6 +89,60 @@ func TestParseApi_RouteREST(t *testing.T) {
 			wantErr:          false,
 		},
 		{
+			name:             "GET route with string response",
+			input:            `GET /status -> string`,
+			expectMethod:     "GET",
+			expectPathSpec:   []string{"status"},
+			expectReturnType: "string",
+			expectDecorators: []string{},
+			wantErr:          false,
+		},
+		{
+			name:             "DELETE route with void return",
+			input:            `DELETE /users/:id -> void`,
+			expectMethod:     "DELETE",
+			expectPathSpec:   []string{"users", "id"},
+			expectReturnType: "void",
+			expectDecorators: []string{},
+			wantErr:          false,
+		},
+		{
+			name:             "Invalid GET route syntax should not parse decorator as identifier",
+			input:            `GET /users -> User[] @invalid`,
+			expectMethod:     "GET",
+			expectPathSpec:   []string{"users"},
+			expectReturnType: "User[]",
+			expectDecorators: []string{"invalid"},
+			wantErr:          true,
+		},
+		{
+			name:             "Invalid POST route syntax should not parse decorator as identifier",
+			input:            `POST /users/:id -> User @invalid`,
+			expectMethod:     "POST",
+			expectPathSpec:   []string{"users", "id"},
+			expectReturnType: "User",
+			expectDecorators: []string{"invalid"},
+			wantErr:          true,
+		},
+		{
+			name:             "Invalid DELETE route syntax should not parse decorator as identifier",
+			input:            `DELETE /users/:id -> DeleteResult @invalid`,
+			expectMethod:     "DELETE",
+			expectPathSpec:   []string{"users", "id"},
+			expectReturnType: "DeleteResult",
+			expectDecorators: []string{"invalid"},
+			wantErr:          true,
+		},
+		{
+			name:             "Incomplete route definition",
+			input:            `GET /incomplete -> @invalid`,
+			expectMethod:     "GET",
+			expectPathSpec:   []string{"incomplete"},
+			expectReturnType: "",
+			expectDecorators: []string{},
+			wantErr:          true,
+		},
+		{
 			name:    "invalid method",
 			input:   `FETCH /data -> Data`,
 			wantErr: true,
@@ -117,6 +171,7 @@ func TestParseApi_RouteREST(t *testing.T) {
 			stencil, err := p.Parse(src)
 			if tc.wantErr {
 				assert.Error(t, err)
+				t.Logf("[%s]: expected error's message: %v", tc.name, err)
 				return
 			}
 			assert.NoError(t, err)
