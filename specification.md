@@ -197,7 +197,7 @@ structures).
 Models can declare unconstrained generic type parameters (e.g., `T`, `E`) that act as placeholders for concrete types.
 
 >[!NOTE]
-> Generic type parameters are **not supported** for `input` declarations. Inputs must be concrete types.
+> Generic type parameters are **only supported** for `model` declarations.
 
 ```stencil
 model Page<T> {        // T is a type parameter (placeholder)
@@ -233,6 +233,10 @@ Schema).
 
 An `input` is intended purely for application inputs. This allows for more flexible data shapes and protects against
 certain types of [input threats](https://owaspai.org/docs/2_threats_through_use/).
+
+>[!NOTE]
+> Generic type parameters are **not supported** for `input` declarations. Inputs must be concrete types.
+
 
 ```stencil
 input CreateUserInput {

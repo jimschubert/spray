@@ -22,3 +22,13 @@ type ParsingError struct {
 func (e *ParsingError) Error() string {
 	return fmt.Sprintf("parsing error at %d:%d: %s", e.Pos.Line, e.Pos.Col, e.Message)
 }
+
+// ResolvingError represents an error encountered during resolving.
+type ResolvingError struct {
+	Pos     ast.Position
+	Message string
+}
+
+func (e *ResolvingError) Error() string {
+	return fmt.Sprintf("resolver error at %d:%d: %s", e.Pos.Line, e.Pos.Col, e.Message)
+}
