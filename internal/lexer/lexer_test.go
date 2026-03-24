@@ -257,6 +257,131 @@ func TestLexIdentifiers(t *testing.T) {
 	}
 }
 
+func TestLexDecorators(t *testing.T) {
+	testCases := []struct {
+		name        string
+		input       string
+		expectError bool
+		expected    []struct {
+			typ itemType
+			val string
+		}
+	}{
+		{
+			name:  "single decorator",
+			input: "@primary",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemAt, "@"},
+				{itemIdent, "primary"},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "two decorators with space",
+			input: "@primary @unique",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemAt, "@"},
+				{itemIdent, "primary"},
+				{itemAt, "@"},
+				{itemIdent, "unique"},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "decorator with args followed by another",
+			input: "@errors(404) @summary",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemAt, "@"},
+				{itemIdent, "errors"},
+				{itemLeftParen, "("},
+				{itemInt, "404"},
+				{itemRightParen, ")"},
+				{itemAt, "@"},
+				{itemIdent, "summary"},
+				{itemEOF, ""},
+			},
+		},
+		{
+			name:  "do not care about comments",
+			input: "# don't do this without spaces: @unique@primary\n@unique @primary\n",
+			expected: []struct {
+				typ itemType
+				val string
+			}{
+				{itemComment, "# don't do this without spaces: @unique@primary"},
+				{itemNewline, "\n"},
+				{itemAt, "@"},
+				{itemIdent, "unique"},
+				{itemAt, "@"},
+				{itemIdent, "primary"},
+				{itemNewline, "\n"},
+				{itemEOF, ""},
+			},
+			expectError: false,
+		},
+		{
+			name:        "identifier-decorator without space",
+			input:       "primary@unique",
+			expectError: true,
+		},
+		{
+			name:        "decorator-decorator without space",
+			input:       "@primary@unique",
+			expectError: true,
+		},
+		{
+			name:        "decorator-arg-decorator without space",
+			input:       "@errors(404)@summary",
+			expectError: true,
+		},
+		{
+			name:        "decorator name and a with space",
+			input:       "@ primary",
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			l := lex("test", tc.input)
+			l.run()
+
+			if tc.expectError {
+				var found bool
+				for {
+					it := l.nextItem()
+					if it.typ == itemError {
+						found = true
+						break
+					}
+					if it.typ == itemEOF {
+						break
+					}
+				}
+				assert.True(t, found, "expected a lex error")
+				return
+			}
+
+			for _, expected := range tc.expected {
+				got := l.nextItem()
+				assert.Equal(t, expected.typ, got.typ)
+				assert.Equal(t, expected.val, got.val)
+			}
+		})
+	}
+}
+
 func TestLexStrings(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -728,4 +853,3 @@ func TestLexPositions(t *testing.T) {
 		})
 	}
 }
-

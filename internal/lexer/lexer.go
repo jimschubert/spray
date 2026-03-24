@@ -74,6 +74,14 @@ func (l *lexer) emit(t itemType) {
 	l.startLine = l.line
 }
 
+// lastWas determines if the last parsed token was a specific itemType
+func (l *lexer) lastWas(t itemType) bool {
+	if len(l.items) == 0 {
+		return false
+	}
+	return l.items[len(l.items)-1].typ == t
+}
+
 // lex creates and returns a new lexer for the given input. Call l.run() to
 // lex the input synchronously, then use l.nextItem() to iterate over tokens.
 func lex(name, input string) *lexer {
@@ -94,12 +102,26 @@ func lex(name, input string) *lexer {
 // lexText is the initial state that scans for keywords, operators, and other tokens.
 func lexText(l *lexer) stateFn {
 	for {
-		l.skipWhitespace()
+		skippedWhitespace := l.skipWhitespace()
 
 		// start of next token
 		l.start = l.pos
 
 		r := l.peek()
+
+		// '@' should never be followed by a space
+		if skippedWhitespace && l.lastWas(itemAt) && isIdentifierRune(r) {
+			return l.errorf("unexpected whitespace after '@'")
+		}
+
+		// '@' should have whitespace before it in certain situations…
+		if r == '@' && !skippedWhitespace && len(l.items) > 0 {
+			last := l.items[len(l.items)-1].typ
+			if last == itemIdent || last == itemRightParen ||
+				(last >= itemKeywordNamespace && last <= itemKeywordVoid) {
+				return l.errorf("missing whitespace before '@'")
+			}
+		}
 
 		if r == newline || r == carriageReturn {
 			if r == carriageReturn {
@@ -150,15 +172,19 @@ func lexText(l *lexer) stateFn {
 	}
 }
 
-// skipWhitespace skips over spaces without emitting tokens
-func (l *lexer) skipWhitespace() {
+// skipWhitespace skips over spaces and tabs without emitting tokens.
+// returns true if any whitespace was consumed.
+func (l *lexer) skipWhitespace() bool {
+	skipped := false
 	for {
 		r := l.peek()
 		if r != ' ' && r != '\t' {
 			break
 		}
 		l.next()
+		skipped = true
 	}
+	return skipped
 }
 
 // tryMatchKeyword attempts to match any keyword at the current position.
