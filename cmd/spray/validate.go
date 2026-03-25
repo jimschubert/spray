@@ -39,9 +39,9 @@ func (v *ValidateCmd) Run() error {
 			fmt.Println(output.Fail(path))
 			if wrapped, ok := errors.AsType[internalerr.JoinUnwrap](err); ok {
 				msg := strings.Builder{}
-				for _, e := range wrapped.Unwrap() {
+				internalerr.ForEachJoinError(wrapped, func(e error) {
 					msg.WriteString(fmt.Sprintf("\t%s\n", e.Error()))
-				}
+				})
 				eee = errors.Join(eee, fmt.Errorf("%s:\n%s", path, msg.String()))
 			} else {
 				eee = errors.Join(eee, fmt.Errorf("%s:\n\t%w", path, err))
