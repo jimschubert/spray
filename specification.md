@@ -576,7 +576,7 @@ ArraySuffix     ::= "[]"
 OptionalSuffix  ::= "?"
 
 ScalarType      ::= "string" | "int" | "float" | "boolean"
-                  | "uuid" | "timestamp" | "date" | "any"
+                  | "uuid" | "timestamp" | "date" | "any" | "void"
 
 ApiDecl         ::= "api" IDENT ApiDecorator* "{" NEWLINE ApiDirective* RouteDecl* "}"
 ApiDecorator    ::= "@version" "(" INT ")"
