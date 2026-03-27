@@ -691,3 +691,68 @@ model User {
 		t.Error("expected Status to be defined")
 	}
 }
+
+func TestNamespaceOf(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		typeName  string
+		wantNS    string
+		wantFound bool
+	}{
+		{
+			name: "explicit namespace",
+			src: `
+namespace acme.users.v1
+
+model User {
+  id: uuid @primary
+}
+`,
+			typeName:  "acme.users.v1.User",
+			wantNS:    "acme.users.v1",
+			wantFound: true,
+		},
+		{
+			name: "implicit (default) namespace",
+			src: `
+model Widget {
+  id: uuid @primary
+}
+`,
+			typeName:  "Widget",
+			wantNS:    "",
+			wantFound: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := parseFile(t, tt.src)
+			resolved, r := resolve(t, file)
+			assertNoErrors(t, r)
+
+			node, ok := resolved.Definition(tt.typeName)
+			assert.True(t, ok)
+
+			ns, found := resolved.NamespaceOf(node)
+			assert.Equal(t, tt.wantFound, found)
+			assert.Equal(t, tt.wantNS, ns)
+		})
+	}
+}
+
+func TestNamespaceOfUnregistered(t *testing.T) {
+	file := parseFile(t, `
+namespace acme.v1
+
+model Foo {
+  id: uuid @primary
+}
+`)
+	resolved, r := resolve(t, file)
+	assertNoErrors(t, r)
+
+	_, found := resolved.NamespaceOf(&ast.Model{})
+	assert.False(t, found)
+}

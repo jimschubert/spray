@@ -20,3 +20,6 @@ These are potential decorator extensions to consider in future iterations.
 - REST streaming (`@stream` decorator or similar). Server-Sent Events (SSE) is a common pattern for REST APIs that
   push data to clients. Maybe something like `GET /feed -> FeedItem @stream`? Only RPC currently supports streaming (`rpc stream`).
 
+## Emitters
+
+- Consider supporting per-emitter configurations, such as defining the order of Markdown outputs, hiding fields via decorator, or breaking down to one markdown per stencil file.

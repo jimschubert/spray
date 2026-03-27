@@ -6,6 +6,7 @@ require (
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/alecthomas/kong v1.14.0
 	github.com/charmbracelet/lipgloss v1.1.0
+	golang.org/x/text v0.35.0
 	rsc.io/omap v1.2.0
 )
 

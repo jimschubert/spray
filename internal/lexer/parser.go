@@ -481,6 +481,7 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 	if p.peek().typ == itemLeftParen {
 		p.next() // consume '('
 		for {
+			// if next-next is ')', we have key-only
 			// check for special literal values first
 			if special, ok := p.peekAny(itemKeywordNow, itemString, itemInt, itemFloat); ok {
 				p.next() // consume keyword or literal
@@ -509,15 +510,8 @@ func (p *parserState) parseDecorator() (*ast.Decorator, error) {
 						return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier or keyword after ':' in decorator argument"}
 					}
 				} else {
-					// Simple value like @style(rest) or @default(member)
-					typeExpr := &ast.TypeExpression{
-						Pos: p.itemPos(keyOrValue),
-						Base: ast.QualifiedIdent{
-							Pos:   p.itemPos(keyOrValue),
-							Parts: []string{keyOrValue.val},
-						},
-					}
-					decorator.Args.Set(keyOrValue.val, typeExpr, p.itemPos(keyOrValue))
+					// Simple key-only value like @style(rest) or @default(member)
+					decorator.Args.Set(keyOrValue.val, nil, p.itemPos(keyOrValue))
 				}
 			} else {
 				return nil, &errors.ParsingError{Pos: p.itemPos(p.peek()), Message: "expected identifier, keyword, string literal, or special value as decorator argument"}

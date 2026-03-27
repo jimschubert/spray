@@ -74,3 +74,11 @@ func (m *OrderedTypeMap) Values() iter.Seq[TypeNode] {
 		}
 	}
 }
+
+func (m *OrderedTypeMap) Len() int {
+	n := 0
+	for range m.values.All() {
+		n++
+	}
+	return n
+}

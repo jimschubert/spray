@@ -14,6 +14,7 @@ type ResolvedSchema struct {
 	Stencils    []*ast.Stencil
 	definitions map[FQN]ast.SpecNode
 	typeLinks   map[*ast.TypeExpression]ast.SpecNode
+	nodeNS      map[ast.SpecNode]string
 }
 
 // Definition looks up a type by its Fully Qualified Name (e.g., "acme.v1.User").
@@ -30,6 +31,12 @@ func (s *ResolvedSchema) ResolveType(expr *ast.TypeExpression) (ast.SpecNode, bo
 	}
 	node, exists := s.typeLinks[expr]
 	return node, exists
+}
+
+// NamespaceOf returns the namespace of a registered spec node.
+func (s *ResolvedSchema) NamespaceOf(node ast.SpecNode) (string, bool) {
+	ns, ok := s.nodeNS[node]
+	return ns, ok
 }
 
 // ResolveModel ensures the TypeExpression resolves specifically to an *ast.Model.
@@ -114,6 +121,7 @@ func New(stencils ...*ast.Stencil) *Resolver {
 			Stencils:    stencils,
 			definitions: make(map[FQN]ast.SpecNode),
 			typeLinks:   make(map[*ast.TypeExpression]ast.SpecNode),
+			nodeNS:      make(map[ast.SpecNode]string),
 		},
 	}
 }
@@ -184,6 +192,7 @@ func (r *Resolver) registerDefinitions() {
 			}
 
 			r.schema.definitions[fqn] = spec
+			r.schema.nodeNS[spec] = namespace
 		}
 	}
 
