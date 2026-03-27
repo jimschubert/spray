@@ -22,4 +22,7 @@ These are potential decorator extensions to consider in future iterations.
 
 ## Emitters
 
-- Consider supporting per-emitter configurations, such as defining the order of Markdown outputs, hiding fields via decorator, or breaking down to one markdown per stencil file.
+- Consider which per-emitter configurations to support, such as:
+  - defining the order of outputs… via templating? (markdown)
+  - hiding fields via decorator
+  - emitting a specific type by name (markdown)
