@@ -156,5 +156,122 @@ api UserService @version(2) @style(rest) {
 	// input
 	assert.Contains(t, contents, "| role | `UserRole` | @default(member) |")
 	assert.Contains(t, contents, "| role | `UserRole?` |  |")
+}
 
+func TestEmitOne(t *testing.T) {
+	src := `
+namespace acme.users.v2
+
+enum UserRole {
+  admin
+  member
+  guest
+}
+
+model User {
+  id:   uuid     @primary
+  role: UserRole @default(member)
+  name: string?
+}
+
+input CreateUserInput {
+  email: string
+  name:  string?
+}
+
+api UserService @version(2) @style(rest) {
+  @basePath("/api/v2/users")
+
+  GET  /    -> User[]
+  POST /    -> User
+    @body(CreateUserInput)
+}`
+
+	tests := []struct {
+		name         string
+		typ          emitter.SpecType
+		specName     string
+		wantErr      bool
+		wantFilename string
+		wantContains []string
+	}{
+		{
+			name:         "emits api by name",
+			typ:          emitter.SpecApi,
+			specName:     "UserService",
+			wantFilename: "user_service.md",
+			wantContains: []string{
+				"### `UserService`",
+				"- **style**: REST",
+				"- **basePath**:",
+				"| GET |",
+				"| POST |",
+			},
+		},
+		{
+			name:         "emits enum by name",
+			typ:          emitter.SpecEnum,
+			specName:     "UserRole",
+			wantFilename: "user_role.md",
+			wantContains: []string{
+				"### `UserRole`",
+				"* admin",
+				"* member",
+				"* guest",
+			},
+		},
+		{
+			name:         "emits model by name",
+			typ:          emitter.SpecModel,
+			specName:     "User",
+			wantFilename: "user.md",
+			wantContains: []string{
+				"### `User`",
+				"| id | `uuid` | @primary |",
+				"| role | `UserRole` | @default(member) |",
+				"| name | `string?` |  |",
+			},
+		},
+		{
+			name:         "emits input by name",
+			typ:          emitter.SpecInput,
+			specName:     "CreateUserInput",
+			wantFilename: "create_user_input.md",
+			wantContains: []string{
+				"### `CreateUserInput`",
+				"| email | `string` |  |",
+				"| name | `string?` |  |",
+			},
+		},
+		{
+			name:     "returns error for unknown name",
+			typ:      emitter.SpecModel,
+			specName: "DoesNotExist",
+			wantErr:  true,
+		},
+	}
+
+	stencil := parseFile(t, src)
+	resolved, res := resolve(t, stencil)
+	assert.NoError(t, res.Error())
+
+	mdEmitter, err := New(resolved)
+	assert.NoError(t, err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := mdEmitter.EmitOne(tt.typ, tt.specName)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantFilename, output.Filename())
+			assert.Equal(t, emitter.ContentText, output.ContentType())
+			contents := string(output.Contents())
+			for _, want := range tt.wantContains {
+				assert.Contains(t, contents, want)
+			}
+		})
+	}
 }

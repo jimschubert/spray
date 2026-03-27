@@ -99,7 +99,7 @@ func (e *emitMarkdown) EmitAll() ([]emitter.Output, error) {
 
 		var filename string
 		if stencil.Namespace != nil {
-			filename = e.namespaceFilename(stencil.Namespace.FullName())
+			filename = e.cleanedFilename(stencil.Namespace.FullName())
 		} else {
 			generated += 1
 			filename = fmt.Sprintf("output_%d.md", generated)
@@ -115,8 +115,50 @@ func (e *emitMarkdown) EmitAll() ([]emitter.Output, error) {
 }
 
 func (e *emitMarkdown) EmitOne(typ emitter.SpecType, name string) (emitter.Output, error) {
-	// TODO implement me
-	panic("implement me")
+	collected := emitter.CollectAll(e.schema.Stencils...)
+	specs, ok := collected[typ]
+	if !ok {
+		return nil, fmt.Errorf("no specs of type %d found", typ)
+	}
+
+	sb := &strings.Builder{}
+	for _, spec := range specs {
+		switch typ {
+		case emitter.SpecApi:
+			api, ok := spec.(*ast.Api)
+			if !ok || api.Name.Value != name {
+				continue
+			}
+			e.emitApi(sb, api)
+		case emitter.SpecEnum:
+			enum, ok := spec.(*ast.Enum)
+			if !ok || enum.Name.Value != name {
+				continue
+			}
+			e.emitEnum(sb, enum)
+		case emitter.SpecModel:
+			model, ok := spec.(*ast.Model)
+			if !ok || model.Name.Value != name {
+				continue
+			}
+			e.emitModel(sb, model)
+		case emitter.SpecInput:
+			input, ok := spec.(*ast.Input)
+			if !ok || input.Name.Value != name {
+				continue
+			}
+			e.emitInput(sb, input)
+		}
+
+		if sb.Len() > 0 {
+			return markdownFile{
+				filename: e.cleanedFilename(name),
+				sb:       *sb,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("%q not found", name)
 }
 
 func (e *emitMarkdown) emitInput(sb *strings.Builder, input *ast.Input) {
@@ -290,18 +332,21 @@ func (e *emitMarkdown) emitEnum(sb *strings.Builder, input *ast.Enum) {
 	sb.WriteString("\n")
 }
 
-func (e *emitMarkdown) namespaceFilename(ns string) string {
+func (e *emitMarkdown) cleanedFilename(target string) string {
 	sb := strings.Builder{}
-	for i := range ns {
-		if ns[i] == '.' {
+	for i := range target {
+		if target[i] == '.' {
 			sb.WriteRune('_')
 			continue
 		}
 
-		if ns[i] >= 'A' && ns[i] <= 'Z' {
-			sb.WriteString(strings.ToLower(string(ns[i])))
-		} else if ns[i] >= 'a' && ns[i] <= 'z' || ns[i] >= '0' && ns[i] <= '9' {
-			sb.WriteByte(ns[i])
+		if target[i] >= 'A' && target[i] <= 'Z' {
+			if i > 0 {
+				sb.WriteString("_")
+			}
+			sb.WriteString(strings.ToLower(string(target[i])))
+		} else if target[i] >= 'a' && target[i] <= 'z' || target[i] >= '0' && target[i] <= '9' {
+			sb.WriteByte(target[i])
 		} else {
 			sb.WriteRune('_')
 		}
