@@ -3,6 +3,7 @@ package resolver
 import (
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/jimschubert/spray/ast"
 )
@@ -15,6 +16,14 @@ type ResolvedSchema struct {
 	definitions map[FQN]ast.SpecNode
 	typeLinks   map[*ast.TypeExpression]ast.SpecNode
 	nodeNS      map[ast.SpecNode]string
+	monomorphs  map[string]Monomorph
+}
+
+// Monomorphs returns a copy of discovered concrete generic instantiations keyed by canonical resolved type key.
+func (s *ResolvedSchema) Monomorphs() map[string]Monomorph {
+	copyMap := make(map[string]Monomorph, len(s.monomorphs))
+	maps.Copy(copyMap, s.monomorphs)
+	return copyMap
 }
 
 // Definition looks up a type by its Fully Qualified Name (e.g., "acme.v1.User").
@@ -23,7 +32,7 @@ func (s *ResolvedSchema) Definition(fqn string) (ast.SpecNode, bool) {
 	return node, exists
 }
 
-// ResolveType takes a TypeExpression from the AST and returns its linked definition.
+// ResolveType returns the definition linked to expr, or false if expr is a scalar.
 func (s *ResolvedSchema) ResolveType(expr *ast.TypeExpression) (ast.SpecNode, bool) {
 	if expr.IsScalar() {
 		// scalars don't have user-defined specification nodes
@@ -39,7 +48,7 @@ func (s *ResolvedSchema) NamespaceOf(node ast.SpecNode) (string, bool) {
 	return ns, ok
 }
 
-// ResolveModel ensures the TypeExpression resolves specifically to an *ast.Model.
+// ResolveModel resolves expr as *ast.Model, returning an error if unresolved or not a model.
 func (s *ResolvedSchema) ResolveModel(expr *ast.TypeExpression) (*ast.Model, error) {
 	node, exists := s.ResolveType(expr)
 	if !exists {
@@ -53,7 +62,7 @@ func (s *ResolvedSchema) ResolveModel(expr *ast.TypeExpression) (*ast.Model, err
 	return model, nil
 }
 
-// ResolveEnum ensures the TypeExpression resolves specifically to an *ast.Enum.
+// ResolveEnum resolves expr as *ast.Enum, returning an error if unresolved or not an enum.
 func (s *ResolvedSchema) ResolveEnum(expr *ast.TypeExpression) (*ast.Enum, error) {
 	node, exists := s.ResolveType(expr)
 	if !exists {
@@ -67,7 +76,7 @@ func (s *ResolvedSchema) ResolveEnum(expr *ast.TypeExpression) (*ast.Enum, error
 	return enum, nil
 }
 
-// ResolveApi ensures the TypeExpression resolves specifically to an *ast.Api.
+// ResolveApi resolves expr as *ast.Api, returning an error if unresolved or not an api.
 func (s *ResolvedSchema) ResolveApi(expr *ast.TypeExpression) (*ast.Api, error) {
 	node, exists := s.ResolveType(expr)
 	if !exists {
@@ -81,7 +90,7 @@ func (s *ResolvedSchema) ResolveApi(expr *ast.TypeExpression) (*ast.Api, error) 
 	return api, nil
 }
 
-// ResolveInput ensures the TypeExpression resolves specifically to an *ast.Input.
+// ResolveInput resolves expr as *ast.Input, returning an error if unresolved or not an input.
 func (s *ResolvedSchema) ResolveInput(expr *ast.TypeExpression) (*ast.Input, error) {
 	node, exists := s.ResolveType(expr)
 	if !exists {
@@ -113,7 +122,7 @@ func (r *Resolver) Error() error {
 	return err
 }
 
-// New initializes a Resolver with the given stencils, which are expected to be the output of the parser.
+// New initializes a Resolver for the given parsed stencils.
 func New(stencils ...*ast.Stencil) *Resolver {
 	return &Resolver{
 		stencils: stencils,
@@ -122,13 +131,13 @@ func New(stencils ...*ast.Stencil) *Resolver {
 			definitions: make(map[FQN]ast.SpecNode),
 			typeLinks:   make(map[*ast.TypeExpression]ast.SpecNode),
 			nodeNS:      make(map[ast.SpecNode]string),
+			monomorphs:  make(map[string]Monomorph),
 		},
 	}
 }
 
 // Resolve executes the two-pass resolution process.
 func (r *Resolver) Resolve() (*ResolvedSchema, error) {
-	// first pass: collects all top-level definitions
 	r.registerDefinitions()
 
 	if len(r.errors) > 0 {
@@ -136,8 +145,10 @@ func (r *Resolver) Resolve() (*ResolvedSchema, error) {
 	}
 
 	// second pass: type linking
-	// walk every stencil again, look at every field/route, and link its TypeExpression to first pass's definition
 	r.linkTypes()
+
+	// build monomorphs from linked types; must run after linkTypes
+	r.monomorphize()
 
 	if len(r.errors) > 0 {
 		return nil, fmt.Errorf("type linking failed with %d errors", len(r.errors))
@@ -146,8 +157,7 @@ func (r *Resolver) Resolve() (*ResolvedSchema, error) {
 	return r.schema, nil
 }
 
-// registerDefinitions performs first pass of the resolution phase to register all discovered type definitions.
-// Walks all parsed files and builds a flat, O(1) lookup map of every Fully Qualified Name (FQN) to its AST node.
+// registerDefinitions performs the first resolution pass, building a flat O(1) FQN→AST-node lookup map.
 func (r *Resolver) registerDefinitions() {
 	for _, stencil := range r.stencils {
 		namespace := ""
@@ -255,15 +265,14 @@ func (r *Resolver) linkTypeExpr(stencil *ast.Stencil, expr *ast.TypeExpression) 
 	}
 }
 
-// linkTypeExprWithGenericScope attempts to resolve a single TypeExpression and its generic arguments, based on any generic parameters in scope.
+// linkTypeExprWithGenericScope resolves expr within the scope of the given generic parameters.
 func (r *Resolver) linkTypeExprWithGenericScope(stencil *ast.Stencil, expr *ast.TypeExpression, genericsInScope []ast.StringLiteral) {
 	if expr.IsScalar() {
 		// no need to link built-ins
 		return
 	}
 
-	// first check if this is a reference to a generic parameter in the current scope.
-	// if so, we don't link. e.g. model Page<T> { detail T } would not link T to anything concrete when evaluating the "detail" expression.
+	// skip generic parameter references — e.g. T in `model Page<T> { detail T }` is not a concrete type.
 	if isGenericParameterInContext(expr, genericsInScope) {
 		return
 	}
@@ -281,9 +290,9 @@ func (r *Resolver) linkTypeExprWithGenericScope(stencil *ast.Stencil, expr *ast.
 	node := r.schema.definitions[fqn]
 	r.schema.typeLinks[expr] = node
 
-	// num of parameters (arity) of the type expresion has to match the num of generic parameters expected by the definition.
-	// e.g. if Page<T> is defined with 1 generic parameter, then Page<string, int> would be an error.
-	expectedArity := r.getGenericArity(node)
+	// arity of the type expression must match the arity of its definition.
+	// e.g. Page<T> expects 1 argument, so Page<string, int> is an error.
+	expectedArity := arity(node)
 	actualArity := len(expr.GenericArgs)
 	if expectedArity > 0 && actualArity != expectedArity {
 		r.errors = append(r.errors, fmt.Errorf(
@@ -301,12 +310,9 @@ func (r *Resolver) linkTypeExprWithGenericScope(stencil *ast.Stencil, expr *ast.
 	}
 }
 
-// isGenericParameterInContext checks if a TypeExpression is a generic parameter in the given context.
+// isGenericParameterInContext reports whether expr refers to one of the given generic parameters.
+// A generic parameter is a single unqualified identifier with no generic arguments (e.g. T, not Page<T> or common.v1.T).
 func isGenericParameterInContext(expr *ast.TypeExpression, genericParams []ast.StringLiteral) bool {
-	// generic parameters must be a single identifier with no generic arguments (e.g. T, not Page<T> or Map<K,V>)
-	// len(expr.Base.Parts) == 1, e.g. "T" because "common.v1.T" is not a valid generic placeholder
-	// len(expr.GenericArgs) == 0 because generic parameters can't have their own generic arguments (e.g. T<string> is not valid)
-	// the conditionals below are just negations of the above
 	if len(expr.Base.Parts) != 1 || len(expr.GenericArgs) != 0 {
 		return false
 	}
@@ -320,29 +326,17 @@ func isGenericParameterInContext(expr *ast.TypeExpression, genericParams []ast.S
 	return false
 }
 
-// getGenericArity returns the number of generic parameters expected by a type definition.
-func (r *Resolver) getGenericArity(node ast.SpecNode) int {
-	switch n := node.(type) {
-	case *ast.Model:
-		return len(n.GenericParams)
-	default:
-		return 0
-	}
-}
-
-// resolveFQN determines the FQN for an expression within the file's (*ast.Stencil) scoping.
+// resolveFQN resolves the FQN for expr within the stencil's scope.
 func (r *Resolver) resolveFQN(stencil *ast.Stencil, expr *ast.TypeExpression) (FQN, bool) {
 	targetName := expr.Base.String()
 
-	// when type is already fully qualified, nothing to do
+	// already fully qualified
 	if _, exists := r.schema.definitions[targetName]; exists {
 		return targetName, true
 	}
 
-	// when it is imported, find FQN based on import
+	// check imports: for `import acme.common.v1 { User }`, match on the short name then build the FQN.
 	for _, imp := range stencil.Imports {
-		// this may look backward. for `import acme.common.v1 { User }`, we're looking at a TypeExpression name=User.
-		// so iterate Names first, find a match, then combine with the import's path for FQN.
 		for _, importedName := range imp.Names {
 			if importedName.Value == targetName {
 				fqn := imp.Path.String() + "." + targetName
@@ -353,7 +347,7 @@ func (r *Resolver) resolveFQN(stencil *ast.Stencil, expr *ast.TypeExpression) (F
 		}
 	}
 
-	// not already FQN, and not imported, so check locally in the file represented by ast.Stencil
+	// fall back to the local namespace
 	if stencil.Namespace != nil {
 		localFQN := stencil.Namespace.FullName() + "." + targetName
 		if _, exists := r.schema.definitions[localFQN]; exists {
@@ -387,12 +381,10 @@ func (r *Resolver) validateImports() {
 			localNames[name] = true
 		}
 
-		// validate each import
 		for _, imp := range stencil.Imports {
 			for _, importedName := range imp.Names {
 				name := importedName.Value
 
-				// does it exist?
 				fqn := imp.Path.String() + "." + name
 				if _, exists := r.schema.definitions[fqn]; !exists {
 					r.errors = append(r.errors, fmt.Errorf(
@@ -404,7 +396,6 @@ func (r *Resolver) validateImports() {
 					continue
 				}
 
-				// does it conflict with local definition?
 				if localNames[name] {
 					r.errors = append(r.errors, fmt.Errorf(
 						"import '%s' conflicts with locally defined type '%s' at line %d",
@@ -416,4 +407,16 @@ func (r *Resolver) validateImports() {
 			}
 		}
 	}
+}
+
+// monomorphize generates concrete type definitions from generic declarations based on their usage.
+// For example, if `Page<T>` is used as `Page<User>` and `Page<Product>`, two new models `PageUser`
+// and `PageProduct` are generated with T substituted, so emitters only deal with concrete types.
+func (r *Resolver) monomorphize() {
+	m := monomorphizer{
+		schema: *r.schema,
+		seen:   make(map[string]Monomorph),
+	}
+
+	r.schema = new(m.monomorphize())
 }

@@ -266,12 +266,7 @@ func (t *TypeExpression) IsScalar() bool {
 		return false
 	}
 	scalar := t.Base.Parts[0]
-	switch scalar {
-	case "string", "int", "float", "boolean", "uuid", "timestamp", "date", "any", "void":
-		return true
-	default:
-		return false
-	}
+	return IsBuiltinScalar(scalar)
 }
 
 func (t *TypeExpression) String() string {
