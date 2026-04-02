@@ -40,7 +40,7 @@ func (v *ValidateCmd) Run() error {
 			if wrapped, ok := errors.AsType[internalerr.JoinUnwrap](err); ok {
 				msg := strings.Builder{}
 				internalerr.ForEachJoinError(wrapped, func(e error) {
-					msg.WriteString(fmt.Sprintf("\t%s\n", e.Error()))
+					fmt.Fprintf(&msg, "\t%s\n", e.Error())
 				})
 				eee = errors.Join(eee, fmt.Errorf("%s:\n%s", path, msg.String()))
 			} else {

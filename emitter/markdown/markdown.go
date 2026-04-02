@@ -465,7 +465,7 @@ func (e *emitMarkdown) buildNotes(decorators []ast.Decorator, exclude func(d ast
 		}
 
 		// pascal case the key, csv the values
-		notes.WriteString(fmt.Sprintf("%s: ", titleCaser.String(decorator.Name)))
+		fmt.Fprintf(&notes, "%s: ", titleCaser.String(decorator.Name))
 		count := decorator.Args.Len()
 		first := true
 		decorator.Args.All()(func(key string, value ast.TypeNode) bool {

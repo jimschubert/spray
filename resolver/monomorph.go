@@ -124,10 +124,10 @@ func (m *Monomorph) stripNamespaceFromKey(key string) string {
 
 			nextIsTypeStart = false
 		} else {
-			// structural character
-			if key[i] == '<' || key[i] == ',' {
+			switch structuralChar := key[i]; structuralChar {
+			case '<', ',':
 				nextIsTypeStart = true
-			} else if key[i] == '>' {
+			case '>':
 				nextIsTypeStart = false
 			}
 

@@ -334,9 +334,9 @@ func (d *Decorator) String() string {
 			// parser will handle quoted and unquoted strings
 			sb.WriteString(v.Value)
 		case *IntLiteral:
-			sb.WriteString(fmt.Sprintf("%d", v.Value))
+			fmt.Fprintf(&sb, "%d", v.Value)
 		case *FloatLiteral:
-			sb.WriteString(fmt.Sprintf("%g", v.Value))
+			fmt.Fprintf(&sb, "%g", v.Value)
 		case *TypeExpression:
 			sb.WriteString(v.String())
 		default:
