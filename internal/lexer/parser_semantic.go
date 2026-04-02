@@ -109,11 +109,7 @@ func (p *Parser) semanticValidation(stencil *ast.Stencil) error {
 					}
 
 					// only @errors allows multiple arguments (excluding @raw)
-					argCount := 0
-					for range dec.Args.Keys() {
-						argCount++
-					}
-					if argCount > 1 && dec.Name != "errors" && dec.Name != "raw" {
+					if dec.Args.Len() > 1 && dec.Name != "errors" && dec.Name != "raw" {
 						err = errors.Join(err, fmt.Errorf(
 							"decorator %q does not support multiple arguments [line: %d, col: %d] (only @errors supports comma-separated values)",
 							dec.Name,

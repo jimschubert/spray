@@ -6,6 +6,7 @@ import (
 
 	"github.com/jimschubert/spray/ast"
 	"github.com/jimschubert/spray/emitter"
+	"github.com/jimschubert/spray/internal/sequence"
 	"github.com/jimschubert/spray/resolver"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -213,13 +214,12 @@ func (e *emitMarkdown) emitApi(sb *strings.Builder, input *ast.Api) {
 	for i := range input.ApiDecorators {
 		directive := input.ApiDecorators[i]
 		if directive.Name == "version" {
-			for k := range directive.Args.Keys() {
+			if k, err := sequence.GetFirstValue(directive.Args.Keys()); err == nil {
 				if strings.HasPrefix(k, "v") {
 					version = k
 				} else {
 					version = "v" + k
 				}
-				break
 			}
 		}
 	}
@@ -362,10 +362,7 @@ func (e *emitMarkdown) emitwriteRestTableRow(sb *strings.Builder, route *ast.Res
 	body := e.findBodyDecorator(route.Decorators)
 	var bodyName string
 	if body != nil {
-		for s := range body.Args.Keys() {
-			bodyName = s
-			break
-		}
+		bodyName, _ = sequence.GetFirstValue(body.Args.Keys())
 	}
 
 	notes := e.buildNotes(route.Decorators, func(d ast.Decorator) bool { return d.Name == "body" })
@@ -388,10 +385,7 @@ func (e *emitMarkdown) emitRpcTableRow(sb *strings.Builder, route *ast.RpcRoute)
 	body := e.findBodyDecorator(route.Decorators)
 	var bodyName string
 	if body != nil {
-		for s := range body.Args.Keys() {
-			bodyName = s
-			break
-		}
+		bodyName, _ = sequence.GetFirstValue(body.Args.Keys())
 	}
 
 	notes := e.buildNotes(route.Decorators, func(d ast.Decorator) bool { return d.Name == "body" })
@@ -413,10 +407,7 @@ func (e *emitMarkdown) emitEventsTableRow(sb *strings.Builder, route *ast.EventR
 	body := e.findBodyDecorator(route.Decorators)
 	var bodyName string
 	if body != nil {
-		for s := range body.Args.Keys() {
-			bodyName = s
-			break
-		}
+		bodyName, _ = sequence.GetFirstValue(body.Args.Keys())
 	}
 
 	notes := e.buildNotes(route.Decorators, func(d ast.Decorator) bool { return d.Name == "body" })
