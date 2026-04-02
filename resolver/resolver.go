@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 
 	"github.com/jimschubert/spray/ast"
 )
@@ -24,6 +25,31 @@ func (s *ResolvedSchema) Monomorphs() map[string]Monomorph {
 	copyMap := make(map[string]Monomorph, len(s.monomorphs))
 	maps.Copy(copyMap, s.monomorphs)
 	return copyMap
+}
+
+// MonomorphFor returns the Monomorph for an ast.TypeExpression, if one exists.
+// expr must be an original AST pointer (i.e. from a field type, route return, etc.) — its
+// GenericArgs are also expected to be in typeLinks.
+func (s *ResolvedSchema) MonomorphFor(expr *ast.TypeExpression) (Monomorph, bool) {
+	if len(expr.GenericArgs) == 0 {
+		return Monomorph{}, false
+	}
+	node, ok := s.typeLinks[expr]
+	if !ok {
+		return Monomorph{}, false
+	}
+	baseName := ast.NameOf(node)
+	if baseName == "" {
+		return Monomorph{}, false
+	}
+	ns, _ := s.NamespaceOf(node)
+	fqn := baseName
+	if ns != "" {
+		fqn = ns + "." + baseName
+	}
+	key := s.monomorphKey(fqn, expr.GenericArgs)
+	mono, ok := s.monomorphs[key]
+	return mono, ok
 }
 
 // Definition looks up a type by its Fully Qualified Name (e.g., "acme.v1.User").
@@ -419,4 +445,41 @@ func (r *Resolver) monomorphize() {
 	}
 
 	r.schema = new(m.monomorphize())
+}
+
+// monomorphKey builds the key for a generic concrete type, mirroring monomorphizer.
+// Example: fqn="acme.v1.Page", args=[User] → "acme.v1.Page<acme.v1.User>"
+func (s *ResolvedSchema) monomorphKey(fqn string, args []ast.TypeExpression) string {
+	var sb strings.Builder
+	sb.WriteString(fqn)
+	sb.WriteByte('<')
+	for i := range args {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(s.typeExprKey(&args[i]))
+	}
+	sb.WriteByte('>')
+	return sb.String()
+}
+
+// typeExprKey builds the FQN key part for an ast.TypeExpression
+func (s *ResolvedSchema) typeExprKey(expr *ast.TypeExpression) string {
+	if expr.IsScalar() {
+		return expr.Base.String()
+	}
+	name := expr.Base.String()
+	if def, ok := s.typeLinks[expr]; ok {
+		baseName := ast.NameOf(def)
+		ns, _ := s.NamespaceOf(def)
+		if ns != "" {
+			name = ns + "." + baseName
+		} else {
+			name = baseName
+		}
+	}
+	if len(expr.GenericArgs) > 0 {
+		name = s.monomorphKey(name, expr.GenericArgs)
+	}
+	return name
 }

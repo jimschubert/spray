@@ -756,3 +756,215 @@ model Foo {
 	_, found := resolved.NamespaceOf(&ast.Model{})
 	assert.False(t, found)
 }
+
+func TestMonomorphFor(t *testing.T) {
+	tests := []struct {
+		name      string
+		sources   []string
+		getExpr   func(t *testing.T, schema *ResolvedSchema) *ast.TypeExpression
+		wantFound bool
+		wantName  string
+	}{
+		{
+			name: "no generic args returns false",
+			sources: []string{`
+namespace test
+
+model User {
+  id: uuid
+}
+
+model Container {
+  user: User
+}
+`},
+			getExpr: func(t *testing.T, schema *ResolvedSchema) *ast.TypeExpression {
+				t.Helper()
+				node, _ := schema.Definition("test.Container")
+				return &node.(*ast.Model).Fields[0].Type
+			},
+			wantFound: false,
+		},
+		{
+			name: "single param via route return",
+			sources: []string{`
+namespace test
+
+model User {
+  id: uuid
+}
+
+model Page<T> {
+  items: T[]
+  total: int
+}
+
+api TestApi @style(rest) {
+  GET / -> Page<User>
+}
+`},
+			getExpr: func(t *testing.T, schema *ResolvedSchema) *ast.TypeExpression {
+				t.Helper()
+				node, _ := schema.Definition("test.TestApi")
+				return &node.(*ast.Api).Routes[0].(*ast.RestRoute).Return
+			},
+			wantFound: true,
+			wantName:  "PageUser",
+		},
+		{
+			name: "single param via model field",
+			sources: []string{`
+namespace test
+
+model User {
+  id: uuid
+}
+
+model Page<T> {
+  items: T[]
+  total: int
+}
+
+model Feed {
+  page:  Page<User>
+  title: string
+}
+`},
+			getExpr: func(t *testing.T, schema *ResolvedSchema) *ast.TypeExpression {
+				t.Helper()
+				node, _ := schema.Definition("test.Feed")
+				return &node.(*ast.Model).Fields[0].Type
+			},
+			wantFound: true,
+			wantName:  "PageUser",
+		},
+		{
+			name: "multi param via route return",
+			sources: []string{`
+namespace test
+
+model User {
+  id: uuid
+}
+
+model ApiError {
+  code: int
+}
+
+model Result<T, E> {
+  ok:    boolean
+  data:  T?
+  error: E?
+}
+
+api TestApi @style(rest) {
+  GET / -> Result<User, ApiError>
+}
+`},
+			getExpr: func(t *testing.T, schema *ResolvedSchema) *ast.TypeExpression {
+				t.Helper()
+				node, _ := schema.Definition("test.TestApi")
+				return &node.(*ast.Api).Routes[0].(*ast.RestRoute).Return
+			},
+			wantFound: true,
+			wantName:  "ResultUserApiError",
+		},
+		{
+			name: "scalar generic arg",
+			sources: []string{`
+namespace test
+
+model Wrapper<T> {
+  value: T
+}
+
+model Container {
+  inner: Wrapper<int>
+}
+`},
+			getExpr: func(t *testing.T, schema *ResolvedSchema) *ast.TypeExpression {
+				t.Helper()
+				node, _ := schema.Definition("test.Container")
+				return &node.(*ast.Model).Fields[0].Type
+			},
+			wantFound: true,
+			wantName:  "WrapperInt",
+		},
+		{
+			// when types are not in typeLinks, the lookup must return false
+			name: "unlinked open types returns false",
+			sources: []string{`
+namespace test
+
+model Page<T> {
+  items: T[]
+}
+
+model User {
+  id: uuid
+}
+`},
+			getExpr: func(t *testing.T, _ *ResolvedSchema) *ast.TypeExpression {
+				return &ast.TypeExpression{
+					Base:        ast.QualifiedIdent{Parts: []string{"Page"}},
+					GenericArgs: []ast.TypeExpression{{Base: ast.QualifiedIdent{Parts: []string{"User"}}}},
+				}
+			},
+			wantFound: false,
+		},
+		{
+			name: "cross-namespace import",
+			sources: []string{`
+namespace acme.common.v1
+
+model Page<T> {
+  items: T[]
+  total: int
+}
+`, `
+namespace acme.users.v1
+
+import acme.common.v1 { Page }
+
+model User {
+  id: uuid
+}
+
+model Feed {
+  page: Page<User>
+}
+`},
+			getExpr: func(t *testing.T, schema *ResolvedSchema) *ast.TypeExpression {
+				t.Helper()
+				node, _ := schema.Definition("acme.users.v1.Feed")
+				return &node.(*ast.Model).Fields[0].Type
+			},
+			wantFound: true,
+			wantName:  "PageUser",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := parser.New()
+			assert.NoError(t, err)
+
+			stencils := make([]*ast.Stencil, 0, len(tt.sources))
+			for _, src := range tt.sources {
+				s, err := p.Parse(src)
+				assert.NoError(t, err)
+				stencils = append(stencils, s)
+			}
+
+			schema, r := resolve(t, stencils...)
+			assertNoErrors(t, r)
+
+			expr := tt.getExpr(t, schema)
+			mono, found := schema.MonomorphFor(expr)
+			assert.Equal(t, tt.wantFound, found)
+			if tt.wantFound {
+				assert.Equal(t, tt.wantName, mono.Name)
+			}
+		})
+	}
+}
