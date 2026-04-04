@@ -135,8 +135,9 @@ func (c *CreateMarkdownCmd) Run() error {
 // CreateJsonSchemaCmd generates JSON Schema output from .stencil files.
 type CreateJsonSchemaCmd struct {
 	createBase
-	Draft    string `help:"JSON Schema draft version to target" enum:"2020-12,2019-09" default:"2020-12"`
-	IDPrefix string `help:"Prefix for all $id values in emitted schemas"`
+	Draft         string `help:"JSON Schema draft version to target" enum:"2020-12,2019-09" default:"2020-12"`
+	IDPrefix      string `help:"Prefix for all $id values in emitted schemas"`
+	RefProcessing string `help:"Processing strategy for emitting $ref (e.g. inline, file, or id)" enum:"inline,file,id" default:"file"`
 }
 
 func (c *CreateJsonSchemaCmd) Run() error {
@@ -150,6 +151,7 @@ func (c *CreateJsonSchemaCmd) Run() error {
 	emitter, err := jsonschema.New(resolved,
 		jsonschema.WithDraft(c.Draft),
 		jsonschema.WithIDPrefix(c.IDPrefix),
+		jsonschema.WithRefProcessing(c.RefProcessing),
 	)
 
 	if err != nil {

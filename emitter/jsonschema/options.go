@@ -24,3 +24,10 @@ func WithDraft(draft string) Options {
 		}
 	}
 }
+
+// WithRefProcessing returns an Option that sets the strategy for emitting $ref (e.g. inline, file, or id).
+func WithRefProcessing(process string) Options {
+	return func(e *emitJsonSchema) {
+		e.refProcessing = process
+	}
+}

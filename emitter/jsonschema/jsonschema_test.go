@@ -281,39 +281,65 @@ func TestAsJsonSchema(t *testing.T) {
 	}
 }
 
-func TestNewSuccess(t *testing.T) {
+func TestNew(t *testing.T) {
 	tests := []struct {
-		name string
-		opts []Options
+		name       string
+		src        string
+		opts       []Options
+		wantDraft  string
+		wantID     string
+		wantSchema bool
 	}{
 		{
-			name: "without options",
-			opts: nil,
+			name:      "without options",
+			src:       `
+namespace test
+
+model M {
+  n: string
+}
+`,
+			wantDraft: defaultDraftURL,
+			wantSchema: true,
 		},
 		{
 			name: "with IDPrefix option",
+			src:  `namespace test`,
 			opts: []Options{WithIDPrefix("https://example.com/schemas/")},
 		},
 		{
 			name: "with Draft option",
+			src:  `namespace test`,
 			opts: []Options{WithDraft("2019-09")},
 		},
 		{
 			name: "with multiple options",
-			opts: []Options{
-				WithIDPrefix("https://example.com/"),
-				WithDraft("2020-12"),
-			},
+			src:  `namespace test`,
+			opts: []Options{WithIDPrefix("https://example.com/"), WithDraft("2020-12")},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved := parseAndResolve(t, `namespace test`)
+			resolved := parseAndResolve(t, tt.src)
 
 			emitterImpl, err := New(resolved, tt.opts...)
 			assert.NoError(t, err)
 			assert.True(t, emitterImpl != nil)
+
+			if !tt.wantSchema {
+				return
+			}
+
+			outputs, err := emitterImpl.EmitAll()
+			assert.NoError(t, err)
+			assert.True(t, len(outputs) >= 1)
+
+			var doc map[string]any
+			assert.NoError(t, json.Unmarshal(outputs[0].Contents(), &doc))
+			schemaURL, ok := doc["$schema"].(string)
+			assert.True(t, ok)
+			assert.Equal(t, tt.wantDraft, schemaURL)
 		})
 	}
 }
@@ -453,23 +479,251 @@ api TestApi @style(rest) {
 	assert.Equal(t, defaultDraftURL, schemaURL)
 }
 
-func TestNew_setsDraft(t *testing.T) {
-	resolved := parseAndResolve(t, `
-namespace x
+func TestVisitRefs(t *testing.T) {
+	replace := func(ref string) string { return "replaced:" + ref }
 
-model M {
-  n: string
+	tests := []struct {
+		name      string
+		setup     func() *Schema
+		input     *Schema
+		wantRoot  string
+		wantProps map[string]string
+		wantDefs  map[string]string
+		wantAnyOf []string
+		wantItems string
+		wantPanic bool
+	}{
+		{
+			name:     "root ref is visited",
+			input:    &Schema{Ref: "#/$defs/Foo"},
+			wantRoot: "replaced:#/$defs/Foo",
+		},
+		{
+			name: "property refs are visited",
+			input: &Schema{
+				Properties: map[string]*Schema{
+					"a": {Ref: "#/$defs/A"},
+					"b": {Type: "string"},
+				},
+			},
+			wantProps: map[string]string{
+				"a": "replaced:#/$defs/A",
+				"b": "",
+			},
+		},
+		{
+			name: "items ref is visited",
+			input: &Schema{
+				Type:  "array",
+				Items: &Schema{Ref: "#/$defs/Item"},
+			},
+			wantItems: "replaced:#/$defs/Item",
+		},
+		{
+			name: "property items ref is visited",
+			input: &Schema{
+				Properties: map[string]*Schema{
+					"tags": {Type: "array", Items: &Schema{Ref: "#/$defs/Tag"}},
+				},
+			},
+			wantProps: map[string]string{
+				"tags": "",
+			},
+		},
+		{
+			name: "def refs are visited",
+			input: &Schema{
+				Defs: map[string]*Schema{
+					"X": {Ref: "#/$defs/X"},
+				},
+			},
+			wantDefs: map[string]string{
+				"X": "replaced:#/$defs/X",
+			},
+		},
+		{
+			name: "anyOf refs are visited",
+			input: &Schema{
+				AnyOf: []*Schema{
+					{Ref: "#/$defs/A"},
+					{Type: "null"},
+				},
+			},
+			wantAnyOf: []string{"replaced:#/$defs/A", ""},
+		},
+		{
+			name:     "empty refs are skipped",
+			input:    &Schema{Properties: map[string]*Schema{"a": {Type: "string"}}},
+			wantRoot: "",
+		},
+		{
+			name: "cycles do not panic",
+			setup: func() *Schema {
+				root := &Schema{Type: "object"}
+				other := &Schema{Type: "object", Defs: map[string]*Schema{"Root": root}}
+				root.Defs = map[string]*Schema{"Other": other}
+				return root
+			},
+			wantPanic: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := tt.input
+			if tt.setup != nil {
+				input = tt.setup()
+			}
+
+			assert.NotPanics(t, func() {
+				visitRefs(input, replace)
+			})
+
+			if tt.wantPanic {
+				return
+			}
+
+			assert.Equal(t, tt.wantRoot, input.Ref)
+			for key, want := range tt.wantProps {
+				assert.Equal(t, want, input.Properties[key].Ref)
+			}
+			for key, want := range tt.wantDefs {
+				assert.Equal(t, want, input.Defs[key].Ref)
+			}
+			for i, want := range tt.wantAnyOf {
+				assert.Equal(t, want, input.AnyOf[i].Ref)
+			}
+			if tt.wantItems != "" {
+				assert.True(t, input.Items != nil)
+				assert.Equal(t, tt.wantItems, input.Items.Ref)
+			}
+		})
+	}
 }
-`)
-	em, err := New(resolved)
-	assert.NoError(t, err)
-	outputs, err := em.EmitAll()
-	assert.NoError(t, err)
-	assert.True(t, len(outputs) >= 1)
 
-	var doc map[string]any
-	assert.NoError(t, json.Unmarshal(outputs[0].Contents(), &doc))
-	schemaURL, ok := doc["$schema"].(string)
-	assert.True(t, ok)
-	assert.Equal(t, defaultDraftURL, schemaURL)
+func TestEmitAll_refProcessing(t *testing.T) {
+	const refSrc = `
+namespace test
+
+model Address {
+  street: string
+  city:   string
+}
+
+model User {
+  id:      uuid
+  address: Address
+}
+`
+	const arrayRefSrc = `
+namespace test
+
+model Tag {
+  name: string
+}
+
+model Post {
+  id:   uuid
+  tags: Tag[]
+}
+`
+
+	tests := []struct {
+		name          string
+		src           string
+		opts          []Options
+		wantFilename  string
+		wantRef       string
+		wantHasDef    bool
+		wantDefName   string
+		wantItemsRef  string
+		wantDefFields []string
+	}{
+		{
+			name:         "default strategy is file",
+			src:          refSrc,
+			wantFilename: "user.json",
+			wantRef:      "./address.json",
+			wantHasDef:   false,
+		},
+		{
+			name:         "file rewrites ref to relative path",
+			src:          refSrc,
+			opts:         []Options{WithRefProcessing("file")},
+			wantFilename: "user.json",
+			wantRef:      "./address.json",
+			wantHasDef:   false,
+		},
+		{
+			name:         "inline keeps ref and populates root $defs",
+			src:          refSrc,
+			opts:         []Options{WithRefProcessing("inline")},
+			wantFilename: "user.json",
+			wantRef:      "#/$defs/Address",
+			wantHasDef:   true,
+			wantDefName:  "Address",
+			wantDefFields: []string{"street", "city"},
+		},
+		{
+			name:         "id rewrites ref to the $id URI of the referenced schema",
+			src:          refSrc,
+			opts:         []Options{WithRefProcessing("id"), WithIDPrefix("https://example.com/")},
+			wantFilename: "user.json",
+			wantRef:      "https://example.com/Address",
+			wantHasDef:   false,
+		},
+		{
+			name:         "inline preserves array item refs",
+			src:          arrayRefSrc,
+			opts:         []Options{WithRefProcessing("inline")},
+			wantFilename: "post.json",
+			wantRef:      "",
+			wantHasDef:   true,
+			wantDefName:  "Tag",
+			wantItemsRef: "#/$defs/Tag",
+			wantDefFields: []string{"name"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := tt.src
+			resolved := parseAndResolve(t, src)
+			emitterImpl, err := New(resolved, tt.opts...)
+			assert.NoError(t, err)
+
+			outputs, err := emitterImpl.EmitAll()
+			assert.NoError(t, err)
+
+			var userFile *schemaFile
+			for _, o := range outputs {
+				if o.Filename() == tt.wantFilename {
+					userFile = o.(*schemaFile)
+					break
+				}
+			}
+			assert.True(t, userFile != nil, "expected %s in outputs", tt.wantFilename)
+
+			if tt.wantFilename == "user.json" {
+				addrProp := userFile.schema.Properties["address"]
+				assert.True(t, addrProp != nil, "expected address property in user schema")
+				assert.Equal(t, tt.wantRef, addrProp.Ref)
+			}
+
+			if tt.wantFilename == "post.json" {
+				tagsProp := userFile.schema.Properties["tags"]
+				assert.True(t, tagsProp != nil, "expected tags property in post schema")
+				assert.True(t, tagsProp.Items != nil, "expected tags.items")
+				assert.Equal(t, tt.wantItemsRef, tagsProp.Items.Ref)
+			}
+
+			def, hasDef := userFile.schema.Defs[tt.wantDefName]
+			assert.Equal(t, tt.wantHasDef, hasDef)
+			if tt.wantHasDef {
+				assert.Equal(t, "object", def.Type)
+				for _, field := range tt.wantDefFields {
+					assert.True(t, def.Properties[field] != nil)
+				}
+			}
+		})
+	}
 }

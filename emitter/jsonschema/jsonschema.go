@@ -73,10 +73,11 @@ func (s Schema) MarshalJSON() ([]byte, error) {
 }
 
 type emitJsonSchema struct {
-	schema   resolver.ResolvedSchema
-	builder  *schema.Builder
-	idPrefix string
-	draft    string
+	schema        resolver.ResolvedSchema
+	builder       *schema.Builder
+	idPrefix      string
+	draft         string
+	refProcessing string
 }
 
 func (e *emitJsonSchema) EmitAll() ([]emitter.Output, error) {
@@ -119,7 +120,87 @@ func (e *emitJsonSchema) EmitAll() ([]emitter.Output, error) {
 		return strings.Compare(a.Filename(), b.Filename())
 	})
 
+	fileBase := make(map[string]*schemaFile, len(out))
+	for _, o := range out {
+		f := o.(*schemaFile)
+		fileBase[strings.TrimSuffix(f.filename, ".json")] = f
+	}
+
+	switch e.refProcessing {
+	case "file":
+		// e.g. rewrite #/$defs/User → ./user.json
+		for _, o := range out {
+			visitRefs(o.(*schemaFile).schema, func(ref string) string {
+				if !strings.HasPrefix(ref, "#/$defs/") {
+					return ref
+				}
+				return "./" + strings.ToLower(strings.TrimPrefix(ref, "#/$defs/")) + ".json"
+			})
+		}
+	case "inline":
+		// e.g. embed #/$defs/User schema into the root schema's $defs
+		for _, o := range out {
+			root := o.(*schemaFile).schema
+			visitRefs(root, func(ref string) string {
+				if !strings.HasPrefix(ref, "#/$defs/") {
+					return ref
+				}
+				refName := strings.TrimPrefix(ref, "#/$defs/")
+				if _, exists := root.Defs[refName]; !exists {
+					if target, ok := fileBase[strings.ToLower(refName)]; ok {
+						// shallow copy to prevent circular references (e.g. User -> []Post -> User)
+						def := *target.schema
+						def.Defs = make(map[string]*Schema)
+						root.Defs[refName] = &def
+					}
+				}
+				return ref
+			})
+		}
+	case "id":
+		// change #/$defs/User to the $id of the User schema (e.g. "https://example.com/User")
+		for _, o := range out {
+			visitRefs(o.(*schemaFile).schema, func(ref string) string {
+				if !strings.HasPrefix(ref, "#/$defs/") {
+					return ref
+				}
+				refName := strings.TrimPrefix(ref, "#/$defs/")
+				if target, ok := fileBase[strings.ToLower(refName)]; ok && target.schema.ID != "" {
+					return target.schema.ID
+				}
+				return ref
+			})
+		}
+	}
+
 	return out, nil
+}
+
+// visitRefs traverses the schema and applies the given function to each $ref
+func visitRefs(s *Schema, fn func(ref string) string) {
+	// visited - avoids infinite recursion on circular references
+	visited := make(map[*Schema]bool)
+	var visit func(*Schema)
+	visit = func(s *Schema) {
+		if s == nil || visited[s] {
+			return
+		}
+		visited[s] = true
+		if s.Ref != "" {
+			s.Ref = fn(s.Ref)
+		}
+		visit(s.Items)
+		for _, prop := range s.Properties {
+			visit(prop)
+		}
+		for _, def := range s.Defs {
+			visit(def)
+		}
+		for _, anyOf := range s.AnyOf {
+			visit(anyOf)
+		}
+	}
+	visit(s)
 }
 
 // EmitOne emits a single spec of the given type and name.
@@ -181,9 +262,10 @@ func New(resolved *resolver.ResolvedSchema, opts ...Options) (emitter.Emitter, e
 
 	b := schema.NewBuilder(*resolved).WithNullableStrategy(schema.NullableAnyOf).WithRefStrategy(schema.RefDefs)
 	e := &emitJsonSchema{
-		schema:  *resolved,
-		builder: b,
-		draft:   defaultDraftURL,
+		schema:        *resolved,
+		builder:       b,
+		draft:         defaultDraftURL,
+		refProcessing: "file",
 	}
 
 	for _, opt := range opts {
