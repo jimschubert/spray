@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jimschubert/spray/ast"
+	"github.com/jimschubert/spray/emitter/jsonschema"
 	"github.com/jimschubert/spray/emitter/markdown"
 	errs "github.com/jimschubert/spray/errors"
 	"github.com/jimschubert/spray/internal/output"
@@ -83,7 +84,8 @@ func (b *createBase) resolve() (*resolver.ResolvedSchema, error) {
 
 // CreateCmd is the top-level `create` command; each subcommand targets a specific output format.
 type CreateCmd struct {
-	Markdown CreateMarkdownCmd `cmd:"" help:"Markdown documentation"`
+	Markdown   CreateMarkdownCmd   `cmd:"" help:"Markdown documentation"`
+	JsonSchema CreateJsonSchemaCmd `cmd:"" help:"JSON Schema"`
 }
 
 // CreateMarkdownCmd generates Markdown output from .stencil files.
@@ -112,6 +114,51 @@ func (c *CreateMarkdownCmd) Run() error {
 	outputs, err := emitter.EmitAll()
 	if err != nil {
 		return fmt.Errorf("emitting markdown: %w", err)
+	}
+
+	if err := os.MkdirAll(c.Out, 0o755); err != nil {
+		return fmt.Errorf("creating output directory %s: %w", c.Out, err)
+	}
+
+	for _, out := range outputs {
+		dest := filepath.Join(c.Out, out.Filename())
+		if err := os.WriteFile(dest, out.Contents(), 0o644); err != nil {
+			fmt.Println(output.Fail(c.relativePath(dest)))
+			return fmt.Errorf("writing %s: %w", dest, err)
+		}
+		fmt.Println(output.Pass(c.relativePath(dest)))
+	}
+
+	return nil
+}
+
+// CreateJsonSchemaCmd generates JSON Schema output from .stencil files.
+type CreateJsonSchemaCmd struct {
+	createBase
+	Draft    string `help:"JSON Schema draft version to target" enum:"2020-12,2019-09" default:"2020-12"`
+	IDPrefix string `help:"Prefix for all $id values in emitted schemas"`
+}
+
+func (c *CreateJsonSchemaCmd) Run() error {
+	fmt.Println(output.Boldf("Generating JSON Schema from %d file(s)...", len(c.Files)))
+
+	resolved, err := c.resolve()
+	if err != nil {
+		return err
+	}
+
+	emitter, err := jsonschema.New(resolved,
+		jsonschema.WithDraft(c.Draft),
+		jsonschema.WithIDPrefix(c.IDPrefix),
+	)
+
+	if err != nil {
+		return fmt.Errorf("creating JSON Schema emitter: %w", err)
+	}
+
+	outputs, err := emitter.EmitAll()
+	if err != nil {
+		return fmt.Errorf("emitting JSON Schema: %w", err)
 	}
 
 	if err := os.MkdirAll(c.Out, 0o755); err != nil {
