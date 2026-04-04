@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jimschubert/spray/ast"
+	"github.com/jimschubert/spray/emitter"
 	"github.com/jimschubert/spray/emitter/jsonschema"
 	"github.com/jimschubert/spray/emitter/markdown"
 	errs "github.com/jimschubert/spray/errors"
@@ -22,6 +23,42 @@ type createBase struct {
 
 	// Files is a slice of files. type is 'path', allowing expansion such as: spray create markdown ./api/*
 	Files []string `arg:"" help:".stencil files to compile" type:"path"`
+}
+
+// createOutputDir ensures the output directory exists.
+func (b *createBase) createOutputDir() error {
+	return os.MkdirAll(b.Out, 0o755)
+}
+
+// writeOutputFiles writes all output files to the specified directory.
+func (b *createBase) writeOutputFiles(outputs []emitter.Output) error {
+	for _, out := range outputs {
+		dest := filepath.Join(b.Out, out.Filename())
+		if err := os.WriteFile(dest, out.Contents(), 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", dest, err)
+		}
+
+		fmt.Println(output.Pass("wrote: " + b.relativePath(dest)))
+	}
+	return nil
+}
+
+// invoke runs the emitter and handles writing output files and errors.
+func (b *createBase) invoke(emitterName string, targetEmitter emitter.Emitter) error {
+	outputs, err := targetEmitter.EmitAll()
+	if err != nil {
+		return fmt.Errorf("emitting %s: %w", emitterName, err)
+	}
+
+	if err := b.createOutputDir(); err != nil {
+		return fmt.Errorf("creating output directory %s: %w", b.Out, err)
+	}
+
+	if err := b.writeOutputFiles(outputs); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // relativePath returns path relative to the working directory only if it is nested, otherwise returns original.
@@ -58,7 +95,7 @@ func (b *createBase) resolve() (*resolver.ResolvedSchema, error) {
 			fmt.Println(output.Fail(display))
 			continue
 		}
-		fmt.Println(output.Pass(display))
+		fmt.Println(output.Pass("loaded: " + display))
 		stencils[i] = s
 	}
 
@@ -106,30 +143,12 @@ func (c *CreateMarkdownCmd) Run() error {
 		return err
 	}
 
-	emitter, err := markdown.New(resolved)
+	targetEmitter, err := markdown.New(resolved)
 	if err != nil {
 		return fmt.Errorf("creating markdown emitter: %w", err)
 	}
 
-	outputs, err := emitter.EmitAll()
-	if err != nil {
-		return fmt.Errorf("emitting markdown: %w", err)
-	}
-
-	if err := os.MkdirAll(c.Out, 0o755); err != nil {
-		return fmt.Errorf("creating output directory %s: %w", c.Out, err)
-	}
-
-	for _, out := range outputs {
-		dest := filepath.Join(c.Out, out.Filename())
-		if err := os.WriteFile(dest, out.Contents(), 0o644); err != nil {
-			fmt.Println(output.Fail(c.relativePath(dest)))
-			return fmt.Errorf("writing %s: %w", dest, err)
-		}
-		fmt.Println(output.Pass(c.relativePath(dest)))
-	}
-
-	return nil
+	return c.invoke("markdown", targetEmitter)
 }
 
 // CreateJsonSchemaCmd generates JSON Schema output from .stencil files.
@@ -148,7 +167,7 @@ func (c *CreateJsonSchemaCmd) Run() error {
 		return err
 	}
 
-	emitter, err := jsonschema.New(resolved,
+	targetEmitter, err := jsonschema.New(resolved,
 		jsonschema.WithDraft(c.Draft),
 		jsonschema.WithIDPrefix(c.IDPrefix),
 		jsonschema.WithRefProcessing(c.RefProcessing),
@@ -158,23 +177,5 @@ func (c *CreateJsonSchemaCmd) Run() error {
 		return fmt.Errorf("creating JSON Schema emitter: %w", err)
 	}
 
-	outputs, err := emitter.EmitAll()
-	if err != nil {
-		return fmt.Errorf("emitting JSON Schema: %w", err)
-	}
-
-	if err := os.MkdirAll(c.Out, 0o755); err != nil {
-		return fmt.Errorf("creating output directory %s: %w", c.Out, err)
-	}
-
-	for _, out := range outputs {
-		dest := filepath.Join(c.Out, out.Filename())
-		if err := os.WriteFile(dest, out.Contents(), 0o644); err != nil {
-			fmt.Println(output.Fail(c.relativePath(dest)))
-			return fmt.Errorf("writing %s: %w", dest, err)
-		}
-		fmt.Println(output.Pass(c.relativePath(dest)))
-	}
-
-	return nil
+	return c.invoke("json schema", targetEmitter)
 }
