@@ -683,6 +683,27 @@ model Post {
 			wantItemsRef: "#/$defs/Tag",
 			wantDefFields: []string{"name"},
 		},
+		{
+			name: "inline defs strip root-level metadata",
+			src: `
+namespace test
+
+model Address {
+  street: string
+}
+
+model User {
+  id:      uuid
+  address: Address
+}
+`,
+			opts:         []Options{WithRefProcessing("inline"), WithIDPrefix("https://example.com/")},
+			wantFilename: "user.json",
+			wantRef:      "#/$defs/Address",
+			wantHasDef:   true,
+			wantDefName:  "Address",
+			wantDefFields: []string{"street"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -723,6 +744,11 @@ model Post {
 				for _, field := range tt.wantDefFields {
 					assert.True(t, def.Properties[field] != nil)
 				}
+				// inlined defs should not have root-level metadata
+				assert.Equal(t, "", def.Schema, "inlined def should not have $schema")
+				assert.Equal(t, "", def.ID, "inlined def should not have $id")
+				assert.Equal(t, "", def.Title, "inlined def should not have title")
+				assert.Equal(t, 0, len(def.Defs), "inlined def should not have nested $defs")
 			}
 		})
 	}

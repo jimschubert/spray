@@ -150,6 +150,10 @@ func (e *emitJsonSchema) EmitAll() ([]emitter.Output, error) {
 					if target, ok := fileBase[strings.ToLower(refName)]; ok {
 						// shallow copy to prevent circular references (e.g. User -> []Post -> User)
 						def := *target.schema
+						// strip root-level metadata and nested $defs from inlined definitions
+						def.Schema = ""
+						def.ID = ""
+						def.Title = ""
 						def.Defs = make(map[string]*Schema)
 						root.Defs[refName] = &def
 					}

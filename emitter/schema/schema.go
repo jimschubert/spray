@@ -404,7 +404,12 @@ func (b *Builder) applyDecorator(decorator *ast.Decorator, s *Schema) *Schema {
 			if s.Extensions == nil {
 				s.Extensions = make(map[string]any)
 			}
-			s.Extensions[decorator.Name] = decorator.Args
+			// ensure custom decorators are x-prefixed for JSON Schema compliance
+			key := decorator.Name
+			if !strings.HasPrefix(strings.ToLower(key), "x-") {
+				key = "x-" + key
+			}
+			s.Extensions[key] = decorator.Args
 		}
 	}
 	return s

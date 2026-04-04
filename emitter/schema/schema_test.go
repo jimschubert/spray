@@ -440,6 +440,26 @@ model Tracked {
 				assert.True(t, s.ReadOnly)
 			},
 		},
+		{
+			name: "custom decorators get x- prefix",
+			src: `
+namespace test
+
+model Entity {
+  id:   string @primary
+  name: string @unique
+  ref:  string @relation(field: otherId)
+}
+`,
+			modelName: "test.Entity",
+			fieldName: "id",
+			checkFunc: func(t *testing.T, s *Schema) {
+				_, hasPrimary := s.Extensions["x-primary"]
+				assert.True(t, hasPrimary, "expected x-primary extension")
+				_, hasRawPrimary := s.Extensions["primary"]
+				assert.False(t, hasRawPrimary, "should not have raw 'primary' key")
+			},
+		},
 	}
 
 	for _, tt := range tests {
