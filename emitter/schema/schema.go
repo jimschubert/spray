@@ -173,7 +173,7 @@ func (b *Builder) Model(model *ast.Model) *Schema {
 	}
 
 	if model.HeadComment != nil && !model.HeadComment.IsEmpty() {
-		s.Description = model.HeadComment.String()
+		s.Description = b.cleanComment(model.HeadComment.String())
 	}
 
 	for i := range model.Fields {
@@ -203,7 +203,7 @@ func (b *Builder) Input(input *ast.Input) *Schema {
 	}
 
 	if input.HeadComment != nil && !input.HeadComment.IsEmpty() {
-		s.Description = input.HeadComment.String()
+		s.Description = b.cleanComment(input.HeadComment.String())
 	}
 
 	for i := range input.Fields {
@@ -248,7 +248,7 @@ func (b *Builder) MonomorphSchema(mono resolver.Monomorph) *Schema {
 	}
 
 	if model.HeadComment != nil && !model.HeadComment.IsEmpty() {
-		s.Description = model.HeadComment.String()
+		s.Description = b.cleanComment(model.HeadComment.String())
 	}
 
 	for i := range model.Fields {
@@ -373,9 +373,9 @@ func (b *Builder) applyFieldMeta(field *ast.Field, s *Schema) *Schema {
 	}
 
 	if field.HeadComment != nil && !field.HeadComment.IsEmpty() {
-		s.Description = field.HeadComment.String()
+		s.Description = b.cleanComment(field.HeadComment.String())
 	} else if field.LineComment != nil {
-		s.Description = field.LineComment.String()
+		s.Description = b.cleanComment(field.LineComment.String())
 	}
 
 	for i := range field.Decorators {
@@ -524,4 +524,34 @@ func (b *Builder) isGenericParam(expr *ast.TypeExpression, genericsInScope []ast
 		}
 	}
 	return false
+}
+
+// cleanComment removes leading '#' characters and spaces from comment lines, as well as newlines, to produce valid JSON strings.
+func (b *Builder) cleanComment(comment string) string {
+	sb := strings.Builder{}
+	var last rune
+	for i := 0; i < len(comment); i++ {
+		if i == 0 || last == '\n' {
+			if comment[i] == '#' {
+				// skip until next non-space
+				for i+1 < len(comment) && comment[i+1] == ' ' {
+					i++
+				}
+				continue
+			}
+		}
+		c := rune(comment[i])
+		if c == '\n' {
+			last = c
+			// replace with single space to separate lines
+			sb.WriteRune(' ')
+			continue
+		}
+		sb.WriteRune(c)
+		last = c
+	}
+	if sb.Len() != 0 {
+		return sb.String()
+	}
+	return comment
 }

@@ -3,6 +3,7 @@ package jsonschema
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -66,9 +67,7 @@ func (s Schema) MarshalJSON() ([]byte, error) {
 		return b, err
 	}
 	// merge extensions into the root object; caution: overwrites any existing keys
-	for k, v := range s.Extensions {
-		m[k] = v
-	}
+	maps.Copy(m, s.Extensions)
 	return json.Marshal(m)
 }
 
@@ -251,9 +250,7 @@ func (e *emitJsonSchema) asJsonSchema(fqn string, generalSchema *schema.Schema) 
 		result.AnyOf[i] = e.asJsonSchema("", anyOf)
 	}
 
-	for key, value := range generalSchema.Extensions {
-		result.Extensions[key] = value
-	}
+	maps.Copy(result.Extensions, generalSchema.Extensions)
 
 	return new(result)
 }

@@ -654,6 +654,180 @@ func TestMonomorphSchema_non_model_returns_nil(t *testing.T) {
 	assert.Equal(t, (*Schema)(nil), b.MonomorphSchema(mono))
 }
 
+func TestCleanComment(t *testing.T) {
+	b := &Builder{}
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "empty string returns original",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "single-line hash stripped",
+			input: "# hello",
+			want:  "hello",
+		},
+		{
+			name:  "hash with no trailing space",
+			input: "#nospace",
+			want:  "nospace",
+		},
+		{
+			name:  "multi-line joins without separator",
+			input: "# line one\n# line two",
+			want:  "line one line two",
+		},
+		{
+			name:  "three lines joined",
+			input: "# first\n# second\n# third",
+			want:  "first second third",
+		},
+		{
+			name:  "plain text without hash passes through",
+			input: "plain text",
+			want:  "plain text",
+		},
+		{
+			name:  "double hash strips only first",
+			input: "## double hash",
+			want:  "# double hash", // edge case (leave? keep?)
+		},
+		{
+			name:  "newlines removed from plain text",
+			input: "line one\nline two",
+			want:  "line one line two",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := b.cleanComment(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestModel_head_comment(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		modelName string
+		wantDesc  string
+	}{
+		{
+			// note this is a bit of a quirk: single comment on model when it is the first definition is ignored. May need to revisit parser logic?
+			name: "single-line head comment",
+			src: `
+namespace test
+
+model Other { id: uuid }
+
+# A user account
+model User {
+  id: uuid @primary
+}
+`,
+			modelName: "test.User",
+			wantDesc:  "A user account",
+		},
+		{
+			name: "multi-line head comment",
+			src: `
+namespace test
+
+# First line
+# Second line
+model User {
+  id: uuid @primary
+}
+`,
+			modelName: "test.User",
+			wantDesc:  "Second line",
+		},
+		{
+			name: "no head comment yields empty description",
+			src: `
+namespace test
+
+model User {
+  id: uuid @primary
+}
+`,
+			modelName: "test.User",
+			wantDesc:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseAndResolve(t, tt.src)
+			b := NewBuilder(*schema)
+			node, ok := schema.Definition(tt.modelName)
+			assert.True(t, ok)
+
+			got := b.Model(node.(*ast.Model))
+			assert.Equal(t, tt.wantDesc, got.Description)
+		})
+	}
+}
+
+func TestField_head_comment(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		modelName string
+		fieldName string
+		wantDesc  string
+	}{
+		{
+			name: "single-line head comment on field",
+			src: `
+namespace test
+
+model User {
+  # The user's display name
+  name: string
+}
+`,
+			modelName: "test.User",
+			fieldName: "name",
+			wantDesc:  "The user's display name",
+		},
+		{
+			name: "multi-line head comment on field",
+			src: `
+namespace test
+
+model User {
+  # Primary identifier
+  # UUID format
+  id: uuid @primary
+}
+`,
+			modelName: "test.User",
+			fieldName: "id",
+			wantDesc:  "Primary identifier UUID format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := parseAndResolve(t, tt.src)
+			b := NewBuilder(*schema)
+			node, ok := schema.Definition(tt.modelName)
+			assert.True(t, ok)
+
+			got := b.Model(node.(*ast.Model))
+			assert.Equal(t, tt.wantDesc, got.Properties[tt.fieldName].Description)
+		})
+	}
+}
+
 func TestModelField_generic_instantiation(t *testing.T) {
 	tests := []struct {
 		name        string

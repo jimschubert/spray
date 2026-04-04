@@ -11,6 +11,7 @@ import (
 	"github.com/jimschubert/spray/emitter"
 	"github.com/jimschubert/spray/emitter/jsonschema"
 	"github.com/jimschubert/spray/emitter/markdown"
+	"github.com/jimschubert/spray/emitter/mermaid"
 	errs "github.com/jimschubert/spray/errors"
 	"github.com/jimschubert/spray/internal/output"
 	"github.com/jimschubert/spray/parser"
@@ -123,6 +124,7 @@ func (b *createBase) resolve() (*resolver.ResolvedSchema, error) {
 type CreateCmd struct {
 	Markdown   CreateMarkdownCmd   `cmd:"" help:"Markdown documentation"`
 	JsonSchema CreateJsonSchemaCmd `cmd:"" help:"JSON Schema"`
+	Mermaid    CreateMermaidCmd    `cmd:"" help:"Mermaid ERD diagram"`
 }
 
 // CreateMarkdownCmd generates Markdown output from .stencil files.
@@ -178,4 +180,25 @@ func (c *CreateJsonSchemaCmd) Run() error {
 	}
 
 	return c.invoke("json schema", targetEmitter)
+}
+
+// CreateMermaidCmd generates Mermaid ERD diagram output from .stencil files.
+type CreateMermaidCmd struct {
+	createBase
+}
+
+func (c *CreateMermaidCmd) Run() error {
+	fmt.Println(output.Boldf("Generating Mermaid ERD from %d file(s)...", len(c.Files)))
+
+	resolved, err := c.resolve()
+	if err != nil {
+		return err
+	}
+
+	targetEmitter, err := mermaid.New(resolved)
+	if err != nil {
+		return fmt.Errorf("creating Mermaid emitter: %w", err)
+	}
+
+	return c.invoke("mermaid", targetEmitter)
 }
