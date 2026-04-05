@@ -113,6 +113,7 @@ func (f *Formatter) formatImport(buf *bytes.Buffer, imp ast.Import) {
 func (f *Formatter) formatEnum(buf *bytes.Buffer, s *ast.Enum) {
 	if s.HeadComment != nil {
 		buf.WriteString(s.HeadComment.String())
+		f.ensureNewline(buf)
 	}
 	fmt.Fprintf(buf, "enum %s {", s.Name.Value)
 	if f.allowCondensedSpecs && len(s.Elements) == 1 {
@@ -195,55 +196,81 @@ func (f *Formatter) formatApi(buf *bytes.Buffer, s *ast.Api) {
 	}
 
 	for i, route := range s.Routes {
-		if i > 0 && i < len(s.Routes)-1 {
+		if i > 0 {
 			f.writeLinesBetweenMembers(buf)
 		}
 
 		switch r := route.(type) {
 		case *ast.RestRoute:
-			f.indent(buf, 1)
-			f.emitPadded(buf, r.Method, maxOperationLen)
-			buf.WriteByte(' ')
-			f.emitPadded(buf, r.Path.String(), maxNameLen)
-			buf.WriteString(" -> ")
-			f.emitPadded(buf, r.Return.String(), maxReturn)
+			// build route line in temp buffer to measure alignment to decorator start position.
+			routeBuf := &bytes.Buffer{}
+			f.indent(routeBuf, 1)
+			f.emitPadded(routeBuf, r.Method, maxOperationLen)
+			routeBuf.WriteByte(' ')
+			f.emitPadded(routeBuf, r.Path.String(), maxNameLen)
+			routeBuf.WriteString(" -> ")
+			f.emitPadded(routeBuf, r.Return.String(), maxReturn)
+
+			decoratorPadding := routeBuf.Len() - (f.indentSize + 1)
+
+			buf.Write(routeBuf.Bytes())
+
 			if len(r.Decorators) > 0 {
-				buf.WriteByte(' ')
+				f.writeDecorators(buf, r.Decorators, 2, decoratorPadding)
+			} else {
+				f.ensureNoTrailingSpace(buf)
+				f.ensureNewline(buf)
 			}
-			f.writeDecorators(buf, r.Decorators, 2, 0)
-			f.ensureNewline(buf)
 		case *ast.RpcRoute:
 			operation := "rpc"
 			if r.Streaming {
 				operation += " stream"
 			}
-			f.indent(buf, 1)
-			f.emitPadded(buf, operation, maxOperationLen)
-			buf.WriteByte(' ')
-			f.emitPadded(buf, r.Name.Value+"("+r.Input.String()+")", maxNameLen)
-			buf.WriteString(" -> ")
-			f.emitPadded(buf, r.Return.String(), maxReturn)
+
+			// build route line in temp buffer to measure alignment to decorator start position.
+			routeBuf := &bytes.Buffer{}
+			f.indent(routeBuf, 1)
+			f.emitPadded(routeBuf, operation, maxOperationLen)
+			routeBuf.WriteByte(' ')
+			f.emitPadded(routeBuf, r.Name.Value+"("+r.Input.String()+")", maxNameLen)
+			routeBuf.WriteString(" -> ")
+			f.emitPadded(routeBuf, r.Return.String(), maxReturn)
+
+			decoratorPadding := routeBuf.Len() - (f.indentSize + 1)
+
+			buf.Write(routeBuf.Bytes())
+
 			if len(r.Decorators) > 0 {
-				buf.WriteByte(' ')
+				f.writeDecorators(buf, r.Decorators, 2, decoratorPadding)
+			} else {
+				f.ensureNoTrailingSpace(buf)
+				f.ensureNewline(buf)
 			}
-			f.writeDecorators(buf, r.Decorators, 2, 0)
-			f.ensureNewline(buf)
 		case *ast.EventRoute:
 			direction := "publish"
 			if r.Direction == ast.EventSubscribe {
 				direction = "subscribe"
 			}
-			f.indent(buf, 1)
-			f.emitPadded(buf, direction, maxOperationLen)
-			buf.WriteByte(' ')
-			f.emitPadded(buf, r.Name.Value, maxNameLen)
-			buf.WriteString(" -> ")
-			f.emitPadded(buf, r.Event.String(), maxReturn)
+
+			// build route line in temp buffer to measure alignment to decorator start position.
+			routeBuf := &bytes.Buffer{}
+			f.indent(routeBuf, 1)
+			f.emitPadded(routeBuf, direction, maxOperationLen)
+			routeBuf.WriteByte(' ')
+			f.emitPadded(routeBuf, r.Name.Value, maxNameLen)
+			routeBuf.WriteString(" -> ")
+			f.emitPadded(routeBuf, r.Event.String(), maxReturn)
+
+			decoratorPadding := routeBuf.Len() - (f.indentSize + 1)
+
+			buf.Write(routeBuf.Bytes())
+
 			if len(r.Decorators) > 0 {
-				buf.WriteByte(' ')
+				f.writeDecorators(buf, r.Decorators, 2, decoratorPadding)
+			} else {
+				f.ensureNoTrailingSpace(buf)
+				f.ensureNewline(buf)
 			}
-			f.writeDecorators(buf, r.Decorators, 2, 0)
-			f.ensureNewline(buf)
 		default:
 			panic(fmt.Sprintf("unknown route type: %T", route))
 		}
@@ -281,15 +308,15 @@ func (f *Formatter) formatInput(buf *bytes.Buffer, s *ast.Input) {
 			f.writeLinesBetweenMembers(buf)
 		}
 
-		f.indent(buf, 1)
-		hangingIndent := 0
-		if f.alignMembers {
-			hangingIndent = maxNameLen + 2
-		}
+		fieldBuf := &bytes.Buffer{}
+		f.indent(fieldBuf, 1)
+		f.emitPadded(fieldBuf, member.Name.Value, maxNameLen)
+		fieldBuf.WriteString(": ")
+		f.emitPadded(fieldBuf, member.Type.String(), maxTypeLen)
 
-		f.emitPadded(buf, member.Name.Value, maxNameLen)
-		buf.WriteString(": ")
-		f.emitPadded(buf, member.Type.String(), maxTypeLen)
+		decoratorPadding := fieldBuf.Len() - (f.indentSize + 1)
+
+		buf.Write(fieldBuf.Bytes())
 
 		if member.LineComment != nil {
 			fmt.Fprintf(buf, " %s", member.LineComment.String())
@@ -297,13 +324,16 @@ func (f *Formatter) formatInput(buf *bytes.Buffer, s *ast.Input) {
 		}
 
 		if len(member.Decorators) > 0 {
-			f.writeDecorators(buf, member.Decorators, 2, hangingIndent)
-			f.ensureNewline(buf)
+			if f.decoratorsStartPosition == DecoratorPositionNextLine {
+				f.ensureNoTrailingSpace(buf)
+			}
+			f.writeDecorators(buf, member.Decorators, 2, decoratorPadding)
 		}
 
 		if member.LineComment == nil {
 			// decorators will "follow" if there's a line comment and start on same line if there's not.
 			// if the last op was a field with no comment or decorator, we need a newline if it doesn't exist
+			f.ensureNoTrailingSpace(buf)
 			f.ensureNewline(buf)
 		}
 	}
@@ -353,15 +383,15 @@ func (f *Formatter) formatModel(buf *bytes.Buffer, s *ast.Model) {
 			f.writeLinesBetweenMembers(buf)
 		}
 
-		f.indent(buf, 1)
-		hangingIndent := 0
-		if f.alignMembers {
-			hangingIndent = maxNameLen + 2
-		}
+		fieldBuf := &bytes.Buffer{}
+		f.indent(fieldBuf, 1)
+		f.emitPadded(fieldBuf, member.Name.Value, maxNameLen)
+		fieldBuf.WriteString(": ")
+		f.emitPadded(fieldBuf, member.Type.String(), maxTypeLen)
 
-		f.emitPadded(buf, member.Name.Value, maxNameLen)
-		buf.WriteString(": ")
-		f.emitPadded(buf, member.Type.String(), maxTypeLen)
+		decoratorPadding := fieldBuf.Len() - (f.indentSize + 1)
+
+		buf.Write(fieldBuf.Bytes())
 
 		if member.LineComment != nil {
 			fmt.Fprintf(buf, " %s", member.LineComment.String())
@@ -369,12 +399,16 @@ func (f *Formatter) formatModel(buf *bytes.Buffer, s *ast.Model) {
 		}
 
 		if len(member.Decorators) > 0 {
-			f.writeDecorators(buf, member.Decorators, 2, hangingIndent)
+			if f.decoratorsStartPosition == DecoratorPositionNextLine {
+				f.ensureNoTrailingSpace(buf)
+			}
+			f.writeDecorators(buf, member.Decorators, 2, decoratorPadding)
 		}
 
 		if member.LineComment == nil {
 			// decorators will "follow" if there's a line comment and start on same line if there's not.
 			// if the last op was a field with no comment or decorator, we need a newline if it doesn't exist
+			f.ensureNoTrailingSpace(buf)
 			f.ensureNewline(buf)
 		}
 	}
@@ -385,6 +419,7 @@ func (f *Formatter) formatModel(buf *bytes.Buffer, s *ast.Model) {
 func (f *Formatter) formatTypeAlias(buf *bytes.Buffer, s *ast.TypeAlias) {
 	if s.HeadComment != nil {
 		buf.WriteString(s.HeadComment.String())
+		f.ensureNewline(buf)
 	}
 	fmt.Fprintf(buf, "type %s = %s%s", s.Name.Value, s.Type.String(), s.LineComment.String())
 }
@@ -425,19 +460,26 @@ func (f *Formatter) indent(buf *bytes.Buffer, level int) {
 func (f *Formatter) writeDecorators(buf *bytes.Buffer, decorators []ast.Decorator, level int, padding int) {
 	wrapped := false
 	for i, decorator := range decorators {
-		// level indicates indentation; level=0 means we're not indenting (e.g. api-level decorators).
-		if (i > 0 && level > 0 && i%f.maxDecoratorPerLine == 0) || (i == 0 && f.decoratorsStartPosition == DecoratorPositionNextLine) {
+		isPositionedNextLine := (i == 0 && f.decoratorsStartPosition == DecoratorPositionNextLine)
+		isWrappedLine := (i > 0 && level > 0 && i%f.maxDecoratorPerLine == 0)
+
+		if isPositionedNextLine || isWrappedLine {
 			buf.WriteByte('\n')
 			f.indent(buf, level)
-			if padding > 0 {
-				// for multi-line decorators with aligned members, add extra padding to align with the type
+			// Only apply padding for wrapped lines, not for position-based next-line decorators
+			if padding > 0 && isWrappedLine {
 				buf.WriteString(f.spaces(padding))
 			}
 
 			buf.WriteString(decorator.String())
 
 			wrapped = true
+		} else if i == 0 {
+			// first decorator on same line as content: add leading space
+			buf.WriteByte(' ')
+			buf.WriteString(decorator.String())
 		} else {
+			// subsequent decorators on same line: add space separator
 			buf.WriteByte(' ')
 			buf.WriteString(decorator.String())
 		}
@@ -459,6 +501,20 @@ func (f *Formatter) ensureNewline(buf *bytes.Buffer) {
 	if buf.Len() > 0 && buf.Bytes()[buf.Len()-1] != '\n' {
 		buf.WriteByte('\n')
 	}
+}
+
+// ensureNoTrailingSpace removes trailing spaces before a newline.
+func (f *Formatter) ensureNoTrailingSpace(buf *bytes.Buffer) {
+	if buf.Len() == 0 {
+		return
+	}
+
+	b := buf.Bytes()
+	end := len(b)
+	for end > 0 && b[end-1] == ' ' {
+		end--
+	}
+	buf.Truncate(end)
 }
 
 // ensureSingleTrailingNewline is a special case where we want to avoid lots of space before a closing brace.
