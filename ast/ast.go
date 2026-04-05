@@ -412,11 +412,32 @@ func (a *Api) Position() Position {
 	return a.Pos
 }
 
+type PathSegments []PathSegment
+
+func (p PathSegments) String() string {
+	if len(p) == 0 {
+		return "/"
+	}
+
+	var parts []string
+	for i, segment := range p {
+		if i == 0 {
+			parts = append(parts, "") // Ensure the path starts with a slash
+		}
+		v := segment.Value
+		if segment.IsParam {
+			v = ":" + v
+		}
+		parts = append(parts, v)
+	}
+	return strings.Join(parts, "/")
+}
+
 // RestRoute represents a REST api route definition.
 type RestRoute struct {
 	Pos         Position
 	Method      string
-	Path        []PathSegment
+	Path        PathSegments
 	Return      TypeExpression
 	Decorators  []Decorator
 	HeadComment *CommentGroup

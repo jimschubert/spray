@@ -250,3 +250,74 @@ func TestDecorator_String(t *testing.T) {
 		})
 	}
 }
+
+func TestPathSegments_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		segments PathSegments
+		want     string
+	}{
+		{
+			name:     "empty segments returns root",
+			segments: nil,
+			want:     "/",
+		},
+		{
+			name: "single static segment",
+			segments: []PathSegment{
+				{Value: "users"},
+			},
+			want: "/users",
+		},
+		{
+			name: "single param segment",
+			segments: []PathSegment{
+				{Value: "id", IsParam: true},
+			},
+			want: "/:id",
+		},
+		{
+			name: "multiple static segments",
+			segments: []PathSegment{
+				{Value: "api"},
+				{Value: "v1"},
+				{Value: "users"},
+			},
+			want: "/api/v1/users",
+		},
+		{
+			name: "mixed static and param segments",
+			segments: []PathSegment{
+				{Value: "users"},
+				{Value: "id", IsParam: true},
+				{Value: "posts"},
+			},
+			want: "/users/:id/posts",
+		},
+		{
+			name: "trailing param",
+			segments: []PathSegment{
+				{Value: "users"},
+				{Value: "id", IsParam: true},
+			},
+			want: "/users/:id",
+		},
+		{
+			name: "multiple params",
+			segments: []PathSegment{
+				{Value: "orgs"},
+				{Value: "orgId", IsParam: true},
+				{Value: "members"},
+				{Value: "memberId", IsParam: true},
+			},
+			want: "/orgs/:orgId/members/:memberId",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.segments.String()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

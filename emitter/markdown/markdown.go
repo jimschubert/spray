@@ -370,7 +370,7 @@ func (e *emitMarkdown) emitwriteRestTableRow(sb *strings.Builder, route *ast.Res
 	resp := route.Return.String()
 	fmt.Fprintf(sb, "| %s | %s | %s | %s | %s |\n",
 		route.Method,
-		emitter.JoinPathSegments(route.Path),
+		route.Path,
 		bodyName,
 		resp,
 		notes,

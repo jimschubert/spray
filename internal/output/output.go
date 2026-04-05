@@ -25,18 +25,30 @@ func Fail(msg string) string {
 	return fmt.Sprintf("%s %s", SymbolX, Grey.Render(msg))
 }
 
-func Successf(format string, args ...any) string {
-	return Success.Render(fmt.Sprintf(format, args...))
+func Successf(msg string, args ...any) string {
+	return Success.Render(fmt.Sprintf(msg, args...))
 }
 
-func Errorf(format string, args ...any) string {
-	return Error.Render(fmt.Sprintf(format, args...))
+func Errorf(msg string, args ...any) string {
+	return Error.Render(fmt.Sprintf(msg, args...))
 }
 
-func Boldf(format string, args ...any) string {
-	return Bold.Render(fmt.Sprintf(format, args...))
+func Boldf(msg string, args ...any) string {
+	return Bold.Render(fmt.Sprintf(msg, args...))
 }
 
-func File(path string) string {
-	return Highlight.Render(path)
+func Plain(msg string) string {
+	return Grey.Render(msg)
+}
+
+func Plainf(msg string, args ...any) string {
+	return Grey.Render(fmt.Sprintf(msg, args...))
+}
+
+func Important(msg string) string {
+	return Highlight.Render(msg)
+}
+
+func Importantf(msg string, args ...any) string {
+	return Highlight.Render(fmt.Sprintf(msg, args...))
 }
