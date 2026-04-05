@@ -124,59 +124,43 @@ func (e *emitJsonSchema) EmitAll() ([]emitter.Output, error) {
 		f := o.(*schemaFile)
 		fileBase[strings.TrimSuffix(f.filename, ".json")] = f
 	}
-
-	switch e.refProcessing {
-	case "file":
-		// e.g. rewrite #/$defs/User → ./user.json
-		for _, o := range out {
-			visitRefs(o.(*schemaFile).schema, func(ref string) string {
-				if !strings.HasPrefix(ref, "#/$defs/") {
-					return ref
-				}
-				return "./" + strings.ToLower(strings.TrimPrefix(ref, "#/$defs/")) + ".json"
-			})
-		}
-	case "inline":
-		// e.g. embed #/$defs/User schema into the root schema's $defs
-		for _, o := range out {
-			root := o.(*schemaFile).schema
-			visitRefs(root, func(ref string) string {
-				if !strings.HasPrefix(ref, "#/$defs/") {
-					return ref
-				}
-				refName := strings.TrimPrefix(ref, "#/$defs/")
-				if _, exists := root.Defs[refName]; !exists {
-					if target, ok := fileBase[strings.ToLower(refName)]; ok {
-						// shallow copy to prevent circular references (e.g. User -> []Post -> User)
-						def := *target.schema
-						// strip root-level metadata and nested $defs from inlined definitions
-						def.Schema = ""
-						def.ID = ""
-						def.Title = ""
-						def.Defs = make(map[string]*Schema)
-						root.Defs[refName] = &def
-					}
-				}
-				return ref
-			})
-		}
-	case "id":
-		// change #/$defs/User to the $id of the User schema (e.g. "https://example.com/User")
-		for _, o := range out {
-			visitRefs(o.(*schemaFile).schema, func(ref string) string {
-				if !strings.HasPrefix(ref, "#/$defs/") {
-					return ref
-				}
-				refName := strings.TrimPrefix(ref, "#/$defs/")
-				if target, ok := fileBase[strings.ToLower(refName)]; ok && target.schema.ID != "" {
-					return target.schema.ID
-				}
-				return ref
-			})
-		}
-	}
+	e.processRefs(out, fileBase)
 
 	return out, nil
+}
+
+// EmitOne emits a single spec of the given type and name.
+func (e *emitJsonSchema) EmitOne(typ emitter.SpecType, name string) (emitter.Output, error) {
+	collected := emitter.CollectAll(e.schema.Stencils...)
+	specs, ok := collected[typ]
+	if !ok {
+		return nil, fmt.Errorf("no specs of type %d found", typ)
+	}
+
+	for _, spec := range specs {
+		specName := ast.NameOf(spec)
+		if specName != name {
+			continue
+		}
+		s := e.builder.Spec(spec)
+		if s == nil {
+			return nil, fmt.Errorf("%q not found", name)
+		}
+
+		root := e.asJsonSchema(name, s)
+
+		sf := &schemaFile{
+			filename: fmt.Sprintf("%s.json", strings.ToLower(name)),
+			schema:   root,
+		}
+
+		fileBase := e.buildFileBase()
+		e.processRefs([]emitter.Output{sf}, fileBase)
+
+		return sf, nil
+	}
+
+	return nil, fmt.Errorf("%q not found", name)
 }
 
 // visitRefs traverses the schema and applies the given function to each $ref
@@ -206,10 +190,84 @@ func visitRefs(s *Schema, fn func(ref string) string) {
 	visit(s)
 }
 
-// EmitOne emits a single spec of the given type and name.
-func (e *emitJsonSchema) EmitOne(typ emitter.SpecType, name string) (emitter.Output, error) {
-	// TODO implement me
-	panic("implement me")
+// processRefs applies ref processing to a slice of schema files. fileBase to resolve cross-references.
+func (e *emitJsonSchema) processRefs(out []emitter.Output, fileBase map[string]*schemaFile) {
+	switch e.refProcessing {
+	case "file":
+		for _, o := range out {
+			visitRefs(o.(*schemaFile).schema, func(ref string) string {
+				if !strings.HasPrefix(ref, "#/$defs/") {
+					return ref
+				}
+				return "./" + strings.ToLower(strings.TrimPrefix(ref, "#/$defs/")) + ".json"
+			})
+		}
+	case "inline":
+		for _, o := range out {
+			visitRefs(o.(*schemaFile).schema, func(ref string) string {
+				if !strings.HasPrefix(ref, "#/$defs/") {
+					return ref
+				}
+				refName := strings.TrimPrefix(ref, "#/$defs/")
+				if _, exists := o.(*schemaFile).schema.Defs[refName]; !exists {
+					if target, ok := fileBase[strings.ToLower(refName)]; ok {
+						def := *target.schema
+						def.Schema = ""
+						def.ID = ""
+						def.Title = ""
+						def.Defs = make(map[string]*Schema)
+						o.(*schemaFile).schema.Defs[refName] = &def
+					}
+				}
+				return ref
+			})
+		}
+	case "id":
+		for _, o := range out {
+			visitRefs(o.(*schemaFile).schema, func(ref string) string {
+				if !strings.HasPrefix(ref, "#/$defs/") {
+					return ref
+				}
+				refName := strings.TrimPrefix(ref, "#/$defs/")
+				if target, ok := fileBase[strings.ToLower(refName)]; ok && target.schema.ID != "" {
+					return target.schema.ID
+				}
+				return ref
+			})
+		}
+	}
+}
+
+// buildFileBase builds out the fileBase map for cross-referencing. It duplicates some logic from EmitAll for use in EmitOne.
+func (e *emitJsonSchema) buildFileBase() map[string]*schemaFile {
+	fileBase := make(map[string]*schemaFile)
+
+	for _, stencil := range e.schema.Stencils {
+		for _, node := range stencil.Specs {
+			s := e.builder.Spec(node)
+			if s != nil {
+				name := ast.NameOf(node)
+				fileBase[strings.ToLower(name)] = &schemaFile{
+					filename: fmt.Sprintf("%s.json", strings.ToLower(name)),
+					schema:   e.asJsonSchema(name, s),
+				}
+			}
+		}
+	}
+
+	monomorphs := e.schema.Monomorphs()
+	for _, mono := range monomorphs {
+		ms := e.builder.MonomorphSchema(mono)
+		if ms == nil {
+			continue
+		}
+		fileBase[strings.ToLower(mono.Name)] = &schemaFile{
+			filename: fmt.Sprintf("%s.json", strings.ToLower(mono.Name)),
+			schema:   e.asJsonSchema(mono.Name, ms),
+		}
+	}
+
+	return fileBase
 }
 
 func (e *emitJsonSchema) asJsonSchema(fqn string, generalSchema *schema.Schema) *Schema {

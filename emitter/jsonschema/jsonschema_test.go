@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
+	"github.com/jimschubert/spray/emitter"
 	"github.com/jimschubert/spray/emitter/schema"
 	"github.com/jimschubert/spray/parser"
 	"github.com/jimschubert/spray/resolver"
@@ -597,6 +598,214 @@ func TestVisitRefs(t *testing.T) {
 				assert.True(t, input.Items != nil)
 				assert.Equal(t, tt.wantItems, input.Items.Ref)
 			}
+		})
+	}
+}
+
+func TestEmitOne(t *testing.T) {
+	tests := []struct {
+		name         string
+		src          string
+		typ          emitter.SpecType
+		specName     string
+		wantFilename string
+		wantTitle    string
+		wantErr      string
+	}{
+		{
+			name: "emit single model",
+			src: `
+namespace test
+
+model User {
+  id:   uuid
+  name: string
+}
+
+model Post {
+  id:    uuid
+  title: string
+}
+`,
+			typ:          emitter.SpecModel,
+			specName:     "User",
+			wantFilename: "user.json",
+			wantTitle:    "User",
+		},
+		{
+			name: "emit single enum",
+			src: `
+namespace test
+
+enum Role {
+  admin
+  member
+}
+
+enum Status {
+  active
+  inactive
+}
+`,
+			typ:          emitter.SpecEnum,
+			specName:     "Role",
+			wantFilename: "role.json",
+			wantTitle:    "Role",
+		},
+		{
+			name: "emit single input",
+			src: `
+namespace test
+
+input CreateUserInput {
+  name:  string
+  email: string
+}
+
+input UpdateUserInput {
+  id:   uuid
+  name: string
+}
+`,
+			typ:          emitter.SpecInput,
+			specName:     "CreateUserInput",
+			wantFilename: "createuserinput.json",
+			wantTitle:    "CreateUserInput",
+		},
+		{
+			name: "model not found",
+			src: `
+namespace test
+
+model User {
+  id: uuid
+}
+`,
+			typ:      emitter.SpecModel,
+			specName: "NotFound",
+			wantErr:  `"NotFound" not found`,
+		},
+		{
+			name: "spec type not found",
+			src: `
+namespace test
+`,
+			typ:      emitter.SpecApi,
+			specName: "SomeApi",
+			wantErr:  `"SomeApi" not found`,
+		},
+		{
+			name: "emit model with references",
+			src: `
+namespace test
+
+model Address {
+  street: string
+  city:   string
+}
+
+model User {
+  id:      uuid
+  name:    string
+  address: Address
+}
+`,
+			typ:          emitter.SpecModel,
+			specName:     "User",
+			wantFilename: "user.json",
+			wantTitle:    "User",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved := parseAndResolve(t, tt.src)
+			emitterImpl, err := New(resolved)
+			assert.NoError(t, err)
+
+			output, err := emitterImpl.EmitOne(tt.typ, tt.specName)
+
+			if tt.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.True(t, output != nil)
+			assert.Equal(t, tt.wantFilename, output.Filename())
+			assert.True(t, json.Valid(output.Contents()), "output should be valid JSON")
+
+			var doc map[string]any
+			assert.NoError(t, json.Unmarshal(output.Contents(), &doc))
+
+			if tt.wantTitle != "" {
+				title, ok := doc["title"].(string)
+				assert.True(t, ok)
+				assert.Equal(t, tt.wantTitle, title)
+			}
+		})
+	}
+}
+
+func TestEmitOne_refProcessing(t *testing.T) {
+	src := `
+namespace test
+
+model Address {
+  street: string
+  city:   string
+}
+
+model User {
+  id:      uuid
+  address: Address
+}
+`
+
+	tests := []struct {
+		name       string
+		opts       []Options
+		wantRef    string
+		wantHasDef bool
+	}{
+		{
+			name:       "file mode rewrites ref to relative path",
+			opts:       []Options{WithRefProcessing("file")},
+			wantRef:    "./address.json",
+			wantHasDef: false,
+		},
+		{
+			name:       "inline mode keeps ref and populates $defs",
+			opts:       []Options{WithRefProcessing("inline")},
+			wantRef:    "#/$defs/Address",
+			wantHasDef: true,
+		},
+		{
+			name:       "id mode rewrites ref to $id URI",
+			opts:       []Options{WithRefProcessing("id"), WithIDPrefix("https://example.com/")},
+			wantRef:    "https://example.com/Address",
+			wantHasDef: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved := parseAndResolve(t, src)
+			emitterImpl, err := New(resolved, tt.opts...)
+			assert.NoError(t, err)
+
+			output, err := emitterImpl.EmitOne(emitter.SpecModel, "User")
+			assert.NoError(t, err)
+			assert.True(t, output != nil)
+
+			sf := output.(*schemaFile)
+			addrProp := sf.schema.Properties["address"]
+			assert.True(t, addrProp != nil)
+			assert.Equal(t, tt.wantRef, addrProp.Ref)
+
+			_, hasDef := sf.schema.Defs["Address"]
+			assert.Equal(t, tt.wantHasDef, hasDef)
 		})
 	}
 }
