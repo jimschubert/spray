@@ -2,8 +2,8 @@
 
 [![Build Status](https://github.com/jimschubert/spray/actions/workflows/build.yml/badge.svg)](https://github.com/jimschubert/spray/actions/workflows/build.yml)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/jimschubert/spray)](https://github.com/jimschubert/spray/blob/main/go.mod)
-[![License](https://img.shields.io/github/license/jimschubert/spray?a=b&color=blue)](https://github.com/jimschubert/spray/blob/main/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jimschubert/spray)](https://goreportcard.com/report/github.com/jimschubert/spray)
+[![License](https://img.shields.io/github/license/jimschubert/spray?aa=b&color=blue)](https://github.com/jimschubert/spray/blob/main/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/jimschubert/spray?a=b)](https://goreportcard.com/report/github.com/jimschubert/spray)
 [![GitHub Release](https://img.shields.io/github/v/release/jimschubert/spray)](https://github.com/jimschubert/spray/releases/latest)
 
 `spray` is a tool for creating your next API-based work of art from `.stencil` files.
