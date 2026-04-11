@@ -230,6 +230,7 @@ func (c *CreateExtCmd) Run() error {
 
 	fmt.Println(output.Pass("plugin: " + bin))
 
+	//nolint:staticcheck
 	resolved, err := c.createBase.resolve()
 	if err != nil {
 		return err
@@ -240,5 +241,6 @@ func (c *CreateExtCmd) Run() error {
 		return fmt.Errorf("initializing plugin %q: %w", c.Ext.Name, err)
 	}
 
+	//nolint:staticcheck
 	return c.createBase.invoke(c.Ext.Name, targetEmitter)
 }

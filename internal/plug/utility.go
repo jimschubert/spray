@@ -19,9 +19,7 @@ func LookupDirs() []string {
 	}
 
 	// then, PATH
-	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
-		dirs = append(dirs, p)
-	}
+	dirs = append(dirs, filepath.SplitList(os.Getenv("PATH"))...)
 
 	return dirs
 }
