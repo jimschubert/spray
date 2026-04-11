@@ -260,6 +260,11 @@ func (t *TypeExpression) Position() Position {
 	return t.Pos
 }
 
+// IsAbsent simplifies checking if TypeExpression is the zero-value, meaning it was not initialized as a type.
+func (t *TypeExpression) IsAbsent() bool {
+	return len(t.Base.Parts) == 0
+}
+
 // IsScalar reports whether this type is one of the built-in scalar types.
 func (t *TypeExpression) IsScalar() bool {
 	if len(t.Base.Parts) != 1 {

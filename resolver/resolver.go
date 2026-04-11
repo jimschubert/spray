@@ -257,7 +257,9 @@ func (r *Resolver) linkTypes() {
 					case *ast.RestRoute:
 						r.linkTypeExpr(stencil, &rt.Return)
 					case *ast.RpcRoute:
-						r.linkTypeExpr(stencil, &rt.Input)
+						if !rt.Input.IsAbsent() {
+							r.linkTypeExpr(stencil, &rt.Input)
+						}
 						r.linkTypeExpr(stencil, &rt.Return)
 					case *ast.EventRoute:
 						r.linkTypeExpr(stencil, &rt.Event)

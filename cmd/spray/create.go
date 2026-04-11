@@ -14,6 +14,7 @@ import (
 	"github.com/jimschubert/spray/emitter/mermaid"
 	errs "github.com/jimschubert/spray/errors"
 	"github.com/jimschubert/spray/internal/output"
+	"github.com/jimschubert/spray/internal/plug"
 	"github.com/jimschubert/spray/parser"
 	"github.com/jimschubert/spray/resolver"
 )
@@ -125,6 +126,7 @@ type CreateCmd struct {
 	Markdown   CreateMarkdownCmd   `cmd:"" help:"Markdown documentation"`
 	JsonSchema CreateJsonSchemaCmd `cmd:"" help:"JSON Schema"`
 	Mermaid    CreateMermaidCmd    `cmd:"" help:"Mermaid ERD diagram"`
+	Ext        CreateExtCmd        `cmd:"" help:"External emitter plugin"`
 }
 
 // CreateMarkdownCmd generates Markdown output from .stencil files.
@@ -155,10 +157,10 @@ func (c *CreateMarkdownCmd) Run() error {
 
 // CreateJsonSchemaCmd generates JSON Schema output from .stencil files.
 type CreateJsonSchemaCmd struct {
-	createBase
 	Draft         string `help:"JSON Schema draft version to target" enum:"2020-12,2019-09" default:"2020-12"`
 	IDPrefix      string `help:"Prefix for all $id values in emitted schemas"`
 	RefProcessing string `help:"Processing strategy for emitting $ref (e.g. inline, file, or id)" enum:"inline,file,id" default:"file"`
+	createBase
 }
 
 func (c *CreateJsonSchemaCmd) Run() error {
@@ -201,4 +203,42 @@ func (c *CreateMermaidCmd) Run() error {
 	}
 
 	return c.invoke("mermaid", targetEmitter)
+}
+
+// CreateExtCmd invokes an external emitter plugin by name. Name must be in the format `spray-emitter-<name>`.
+// Looks first in ~/.spray/plugins/, then in $PATH.
+//
+// The plugin system emits a schema as JSON on the plugin's stdin and expects a JSON response to stdout.
+type CreateExtCmd struct {
+	Ext struct {
+		Name string `arg:"" help:"External emitter name (matches spray-emitter-<name> on PATH)"`
+	} `embed:""`
+	createBase
+}
+
+func (c *CreateExtCmd) Run() error {
+	fmt.Println(output.Boldf("Generating %q output from %d file(s)...", c.Ext.Name, len(c.Files)))
+	bin, err := plug.Find(c.Ext.Name)
+	if err != nil {
+		fmt.Println(output.Errorf("Plugin %q not found.", c.Ext.Name))
+		fmt.Println(output.Errorf("Spray searches for plugins named spray-emitter-%s in:", c.Ext.Name))
+		for _, dir := range plug.LookupDirs() {
+			fmt.Println(output.Errorf(" -  %s", dir))
+		}
+		return err
+	}
+
+	fmt.Println(output.Pass("plugin: " + bin))
+
+	resolved, err := c.createBase.resolve()
+	if err != nil {
+		return err
+	}
+
+	targetEmitter, err := plug.New(c.Ext.Name, resolved)
+	if err != nil {
+		return fmt.Errorf("initializing plugin %q: %w", c.Ext.Name, err)
+	}
+
+	return c.createBase.invoke(c.Ext.Name, targetEmitter)
 }

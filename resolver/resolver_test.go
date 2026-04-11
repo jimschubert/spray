@@ -757,6 +757,157 @@ model Foo {
 	assert.False(t, found)
 }
 
+func TestRpcRouteWithoutInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name: "no-input rpc route resolves without error",
+			input: `
+namespace acme.v1
+
+model User {
+  id: string
+}
+
+api UserService @style(rpc) {
+  rpc GetUser -> User
+}
+`,
+		},
+		{
+			name: "no-input rpc stream route resolves without error",
+			input: `
+namespace acme.v1
+
+model User {
+  id: string
+}
+
+api UserService @style(rpc) {
+  rpc stream ListUsers -> User[]
+}
+`,
+		},
+		{
+			name: "mixed input and no-input rpc routes resolve without error",
+			input: `
+namespace acme.v1
+
+input GetUserInput {
+  id: string
+}
+
+model User {
+  id: string
+}
+
+api UserService @style(rpc) {
+  rpc GetUser(GetUserInput) -> User
+  rpc stream ListUsers -> User[]
+  rpc Ping -> void
+}
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := parseFile(t, tt.input)
+			_, r := resolve(t, file)
+			assertNoErrors(t, r)
+		})
+	}
+}
+
+func TestRpcRouteArrayReturnType(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		routeIndex     int
+		wantIsArray    bool
+		wantIsOptional bool
+		wantBaseName   string
+	}{
+		{
+			name: "array return type links correctly",
+			input: `
+namespace acme.v1
+
+model User {
+  id: string
+}
+
+api UserService @style(rpc) {
+  rpc stream ListUsers -> User[]
+}
+`,
+			routeIndex:   0,
+			wantIsArray:  true,
+			wantBaseName: "User",
+		},
+		{
+			name: "optional return type links correctly",
+			input: `
+namespace acme.v1
+
+model User {
+  id: string
+}
+
+api UserService @style(rpc) {
+  rpc FindUser -> User?
+}
+`,
+			routeIndex:     0,
+			wantIsOptional: true,
+			wantBaseName:   "User",
+		},
+		{
+			name: "plain return type links correctly",
+			input: `
+namespace acme.v1
+
+model User {
+  id: string
+}
+
+api UserService @style(rpc) {
+  rpc GetUser -> User
+}
+`,
+			routeIndex:   0,
+			wantBaseName: "User",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := parseFile(t, tt.input)
+			resolved, r := resolve(t, file)
+			assertNoErrors(t, r)
+
+			apiNode, ok := resolved.Definition("acme.v1.UserService")
+			assert.True(t, ok, "expected UserService api definition")
+
+			api := apiNode.(*ast.Api)
+			route := api.Routes[tt.routeIndex].(*ast.RpcRoute)
+
+			assert.Equal(t, tt.wantIsArray, route.Return.IsArray)
+			assert.Equal(t, tt.wantIsOptional, route.Return.IsOptional)
+			assert.Equal(t, tt.wantBaseName, route.Return.Base.Parts[0])
+
+			// the return type expression must be linked (present in typeLinks)
+			if !route.Return.IsScalar() {
+				linkedNode, linkedOk := resolved.ResolveType(&route.Return)
+				assert.True(t, linkedOk, "expected return type to be linked in typeLinks")
+				assert.NotZero(t, linkedNode, "expected non-nil linked node for return type")
+			}
+		})
+	}
+}
+
 func TestMonomorphFor(t *testing.T) {
 	tests := []struct {
 		name      string

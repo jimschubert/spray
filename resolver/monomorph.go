@@ -13,10 +13,13 @@ import (
 // Monomorph represents a concrete instantiation of a generic declaration, flattened into a representative named type for use by emitters.
 // Original is *ast.SpecNode to allow for potential future Input generics.
 type Monomorph struct {
-	Name            string
-	Namespace       string // optional namespace of the original type
-	Original        *ast.SpecNode
-	Args            []ast.TypeExpression
+	Name string
+	// Namespace (optional) of original type
+	Namespace string
+	Original  *ast.SpecNode
+	Args      []ast.TypeExpression
+	// ArgFQNs holds the fully qualified name (if available) for every index in Args. Scalars or unresolved types will have an empty value.
+	ArgFQNs         []string
 	key             string
 	memoCache       map[string]string
 	retainNamespace bool
@@ -241,6 +244,7 @@ func (m *monomorphizer) collect(def ast.SpecNode, args []ast.TypeExpression) {
 		Namespace: ns,
 		Original:  new(def),
 		Args:      append([]ast.TypeExpression(nil), args...),
+		ArgFQNs:   m.argFQNs(args),
 	}
 
 	emitAs, err := mono.EmitAs()
@@ -281,6 +285,32 @@ func (m *monomorphizer) resolvedTypeExprKey(expr *ast.TypeExpression) string {
 	}
 
 	return name
+}
+
+// argFQNs returns a slice of fully qualified names for the given type expressions, if available.
+// Scalars or unresolved types will have an empty value. indexes map 1:1 with the original args slice.
+func (m *monomorphizer) argFQNs(args []ast.TypeExpression) []string {
+	result := make([]string, len(args))
+	for i := range args {
+		if args[i].IsScalar() {
+			continue
+		}
+		linked, ok := m.schema.typeLinks[&args[i]]
+		if !ok {
+			continue
+		}
+		linkedNS, _ := m.schema.NamespaceOf(linked)
+		linkedName := ast.NameOf(linked)
+		if linkedName == "" {
+			continue
+		}
+		if linkedNS != "" {
+			result[i] = linkedNS + "." + linkedName
+		} else {
+			result[i] = linkedName
+		}
+	}
+	return result
 }
 
 func (m *monomorphizer) isConcrete(expr *ast.TypeExpression) bool {
