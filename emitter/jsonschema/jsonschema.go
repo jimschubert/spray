@@ -17,7 +17,7 @@ const defaultDraftURL = "https://json-schema.org/draft/2020-12/schema"
 
 type schemaFile struct {
 	filename string
-	schema   *Schema
+	schema   *model
 }
 
 func (s *schemaFile) Filename() string {
@@ -36,28 +36,28 @@ func (s *schemaFile) ContentType() emitter.ContentType {
 	return emitter.ContentText
 }
 
-// Schema is a representation of a JSON Schema document (draft 2020-12).
+// this model is a representation of a JSON Schema document (draft 2020-12).
 // see: https://json-schema.org/draft/2020-12/json-schema-core
-type Schema struct {
-	Schema      string             `json:"$schema,omitempty"`
-	ID          string             `json:"$id,omitempty"`
-	Title       string             `json:"title,omitempty"`
-	Type        string             `json:"type,omitempty"`
-	Enum        []string           `json:"enum,omitempty"`
-	Properties  map[string]*Schema `json:"properties,omitempty"`
-	Required    []string           `json:"required,omitempty"`
-	Items       *Schema            `json:"items,omitempty"`
-	Ref         string             `json:"$ref,omitempty"`
-	Defs        map[string]*Schema `json:"$defs,omitempty"`
-	AnyOf       []*Schema          `json:"anyOf,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Format      string             `json:"format,omitempty"`
-	Default     any                `json:"default,omitempty"`
-	Extensions  map[string]any     `json:"-"`
+type model struct {
+	Schema      string            `json:"$schema,omitempty"`
+	ID          string            `json:"$id,omitempty"`
+	Title       string            `json:"title,omitempty"`
+	Type        string            `json:"type,omitempty"`
+	Enum        []string          `json:"enum,omitempty"`
+	Properties  map[string]*model `json:"properties,omitempty"`
+	Required    []string          `json:"required,omitempty"`
+	Items       *model            `json:"items,omitempty"`
+	Ref         string            `json:"$ref,omitempty"`
+	Defs        map[string]*model `json:"$defs,omitempty"`
+	AnyOf       []*model          `json:"anyOf,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Format      string            `json:"format,omitempty"`
+	Default     any               `json:"default,omitempty"`
+	Extensions  map[string]any    `json:"-"`
 }
 
-func (s Schema) MarshalJSON() ([]byte, error) {
-	type Alias Schema
+func (s model) MarshalJSON() ([]byte, error) {
+	type Alias model
 	b, err := json.Marshal(Alias(s))
 	if err != nil || len(s.Extensions) == 0 {
 		return b, err
@@ -164,11 +164,11 @@ func (e *emitJsonSchema) EmitOne(typ emitter.SpecType, name string) (emitter.Out
 }
 
 // visitRefs traverses the schema and applies the given function to each $ref
-func visitRefs(s *Schema, fn func(ref string) string) {
+func visitRefs(s *model, fn func(ref string) string) {
 	// visited - avoids infinite recursion on circular references
-	visited := make(map[*Schema]bool)
-	var visit func(*Schema)
-	visit = func(s *Schema) {
+	visited := make(map[*model]bool)
+	var visit func(*model)
+	visit = func(s *model) {
 		if s == nil || visited[s] {
 			return
 		}
@@ -215,7 +215,7 @@ func (e *emitJsonSchema) processRefs(out []emitter.Output, fileBase map[string]*
 						def.Schema = ""
 						def.ID = ""
 						def.Title = ""
-						def.Defs = make(map[string]*Schema)
+						def.Defs = make(map[string]*model)
 						o.(*schemaFile).schema.Defs[refName] = &def
 					}
 				}
@@ -270,23 +270,23 @@ func (e *emitJsonSchema) buildFileBase() map[string]*schemaFile {
 	return fileBase
 }
 
-func (e *emitJsonSchema) asJsonSchema(fqn string, generalSchema *schema.Schema) *Schema {
+func (e *emitJsonSchema) asJsonSchema(fqn string, generalSchema *schema.Schema) *model {
 	if generalSchema == nil {
 		return nil
 	}
 
-	result := Schema{
+	result := model{
 		Type:        generalSchema.Type,
 		Format:      generalSchema.Format,
 		Enum:        generalSchema.Enum,
 		Ref:         generalSchema.Ref,
 		Description: generalSchema.Description,
 		Default:     generalSchema.Default,
-		Properties:  make(map[string]*Schema),
-		Defs:        make(map[string]*Schema),
+		Properties:  make(map[string]*model),
+		Defs:        make(map[string]*model),
 		Required:    generalSchema.Required,
 		Items:       e.asJsonSchema("", generalSchema.Items),
-		AnyOf:       make([]*Schema, len(generalSchema.AnyOf)),
+		AnyOf:       make([]*model, len(generalSchema.AnyOf)),
 		Extensions:  make(map[string]any),
 	}
 

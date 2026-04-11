@@ -29,12 +29,12 @@ func parseAndResolve(t *testing.T, src string) *resolver.ResolvedSchema {
 func TestSchemaFileContents(t *testing.T) {
 	tests := []struct {
 		name         string
-		schema       *Schema
+		schema       *model
 		wantContains []string
 	}{
 		{
 			name: "simple schema with title and type",
-			schema: &Schema{
+			schema: &model{
 				Title: "User",
 				Type:  "object",
 			},
@@ -42,10 +42,10 @@ func TestSchemaFileContents(t *testing.T) {
 		},
 		{
 			name: "schema with properties",
-			schema: &Schema{
+			schema: &model{
 				Title: "Post",
 				Type:  "object",
-				Properties: map[string]*Schema{
+				Properties: map[string]*model{
 					"id": {
 						Type: "string",
 					},
@@ -58,7 +58,7 @@ func TestSchemaFileContents(t *testing.T) {
 		},
 		{
 			name: "schema with required fields",
-			schema: &Schema{
+			schema: &model{
 				Title:    "Comment",
 				Type:     "object",
 				Required: []string{"id", "content"},
@@ -87,12 +87,12 @@ func TestSchemaFileContents(t *testing.T) {
 func TestSchemaMarshalJSON(t *testing.T) {
 	tests := []struct {
 		name       string
-		schema     *Schema
+		schema     *model
 		wantFields map[string]bool
 	}{
 		{
 			name: "simple schema marshals basic fields",
-			schema: &Schema{
+			schema: &model{
 				Title: "User",
 				Type:  "object",
 			},
@@ -103,7 +103,7 @@ func TestSchemaMarshalJSON(t *testing.T) {
 		},
 		{
 			name: "schema with extensions merges into JSON",
-			schema: &Schema{
+			schema: &model{
 				Title: "User",
 				Type:  "object",
 				Extensions: map[string]any{
@@ -120,7 +120,7 @@ func TestSchemaMarshalJSON(t *testing.T) {
 		},
 		{
 			name: "schema with $schema, $id and title",
-			schema: &Schema{
+			schema: &model{
 				Schema: "https://json-schema.org/draft/2020-12/schema",
 				ID:     "https://example.com/user",
 				Title:  "User",
@@ -292,15 +292,15 @@ func TestNew(t *testing.T) {
 		wantSchema bool
 	}{
 		{
-			name:      "without options",
-			src:       `
+			name: "without options",
+			src: `
 namespace test
 
 model M {
   n: string
 }
 `,
-			wantDraft: defaultDraftURL,
+			wantDraft:  defaultDraftURL,
 			wantSchema: true,
 		},
 		{
@@ -485,8 +485,8 @@ func TestVisitRefs(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		setup     func() *Schema
-		input     *Schema
+		setup     func() *model
+		input     *model
 		wantRoot  string
 		wantProps map[string]string
 		wantDefs  map[string]string
@@ -496,13 +496,13 @@ func TestVisitRefs(t *testing.T) {
 	}{
 		{
 			name:     "root ref is visited",
-			input:    &Schema{Ref: "#/$defs/Foo"},
+			input:    &model{Ref: "#/$defs/Foo"},
 			wantRoot: "replaced:#/$defs/Foo",
 		},
 		{
 			name: "property refs are visited",
-			input: &Schema{
-				Properties: map[string]*Schema{
+			input: &model{
+				Properties: map[string]*model{
 					"a": {Ref: "#/$defs/A"},
 					"b": {Type: "string"},
 				},
@@ -514,17 +514,17 @@ func TestVisitRefs(t *testing.T) {
 		},
 		{
 			name: "items ref is visited",
-			input: &Schema{
+			input: &model{
 				Type:  "array",
-				Items: &Schema{Ref: "#/$defs/Item"},
+				Items: &model{Ref: "#/$defs/Item"},
 			},
 			wantItems: "replaced:#/$defs/Item",
 		},
 		{
 			name: "property items ref is visited",
-			input: &Schema{
-				Properties: map[string]*Schema{
-					"tags": {Type: "array", Items: &Schema{Ref: "#/$defs/Tag"}},
+			input: &model{
+				Properties: map[string]*model{
+					"tags": {Type: "array", Items: &model{Ref: "#/$defs/Tag"}},
 				},
 			},
 			wantProps: map[string]string{
@@ -533,8 +533,8 @@ func TestVisitRefs(t *testing.T) {
 		},
 		{
 			name: "def refs are visited",
-			input: &Schema{
-				Defs: map[string]*Schema{
+			input: &model{
+				Defs: map[string]*model{
 					"X": {Ref: "#/$defs/X"},
 				},
 			},
@@ -544,8 +544,8 @@ func TestVisitRefs(t *testing.T) {
 		},
 		{
 			name: "anyOf refs are visited",
-			input: &Schema{
-				AnyOf: []*Schema{
+			input: &model{
+				AnyOf: []*model{
 					{Ref: "#/$defs/A"},
 					{Type: "null"},
 				},
@@ -554,15 +554,15 @@ func TestVisitRefs(t *testing.T) {
 		},
 		{
 			name:     "empty refs are skipped",
-			input:    &Schema{Properties: map[string]*Schema{"a": {Type: "string"}}},
+			input:    &model{Properties: map[string]*model{"a": {Type: "string"}}},
 			wantRoot: "",
 		},
 		{
 			name: "cycles do not panic",
-			setup: func() *Schema {
-				root := &Schema{Type: "object"}
-				other := &Schema{Type: "object", Defs: map[string]*Schema{"Root": root}}
-				root.Defs = map[string]*Schema{"Other": other}
+			setup: func() *model {
+				root := &model{Type: "object"}
+				other := &model{Type: "object", Defs: map[string]*model{"Root": root}}
+				root.Defs = map[string]*model{"Other": other}
 				return root
 			},
 			wantPanic: false,
@@ -864,13 +864,13 @@ model Post {
 			wantHasDef:   false,
 		},
 		{
-			name:         "inline keeps ref and populates root $defs",
-			src:          refSrc,
-			opts:         []Options{WithRefProcessing("inline")},
-			wantFilename: "user.json",
-			wantRef:      "#/$defs/Address",
-			wantHasDef:   true,
-			wantDefName:  "Address",
+			name:          "inline keeps ref and populates root $defs",
+			src:           refSrc,
+			opts:          []Options{WithRefProcessing("inline")},
+			wantFilename:  "user.json",
+			wantRef:       "#/$defs/Address",
+			wantHasDef:    true,
+			wantDefName:   "Address",
 			wantDefFields: []string{"street", "city"},
 		},
 		{
@@ -882,14 +882,14 @@ model Post {
 			wantHasDef:   false,
 		},
 		{
-			name:         "inline preserves array item refs",
-			src:          arrayRefSrc,
-			opts:         []Options{WithRefProcessing("inline")},
-			wantFilename: "post.json",
-			wantRef:      "",
-			wantHasDef:   true,
-			wantDefName:  "Tag",
-			wantItemsRef: "#/$defs/Tag",
+			name:          "inline preserves array item refs",
+			src:           arrayRefSrc,
+			opts:          []Options{WithRefProcessing("inline")},
+			wantFilename:  "post.json",
+			wantRef:       "",
+			wantHasDef:    true,
+			wantDefName:   "Tag",
+			wantItemsRef:  "#/$defs/Tag",
 			wantDefFields: []string{"name"},
 		},
 		{
@@ -906,11 +906,11 @@ model User {
   address: Address
 }
 `,
-			opts:         []Options{WithRefProcessing("inline"), WithIDPrefix("https://example.com/")},
-			wantFilename: "user.json",
-			wantRef:      "#/$defs/Address",
-			wantHasDef:   true,
-			wantDefName:  "Address",
+			opts:          []Options{WithRefProcessing("inline"), WithIDPrefix("https://example.com/")},
+			wantFilename:  "user.json",
+			wantRef:       "#/$defs/Address",
+			wantHasDef:    true,
+			wantDefName:   "Address",
 			wantDefFields: []string{"street"},
 		},
 	}
