@@ -14,6 +14,7 @@ type JoinUnwrap interface {
 	Unwrap() []error
 }
 
+// ForEachJoinError recursively iterates over all errors contained within a JoinUnwrap, applying the provided function to each non-join error.
 func ForEachJoinError(err JoinUnwrap, f func(error)) {
 	for _, e := range err.Unwrap() {
 		if join, ok := errors.AsType[JoinUnwrap](e); ok {
