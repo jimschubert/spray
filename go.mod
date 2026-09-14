@@ -1,12 +1,12 @@
 module github.com/jimschubert/spray
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/alecthomas/assert/v2 v2.11.0
 	github.com/alecthomas/kong v1.15.0
 	github.com/charmbracelet/lipgloss v1.1.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.42.0
 	rsc.io/omap v1.2.0
 )
 
